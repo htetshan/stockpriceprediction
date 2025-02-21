@@ -21,6 +21,15 @@ first -> git clone [repo]
 
 ## after all complete above run this
 
+# Easier way to install is
+
+```bash
+pip install -r requirements.txt
+
+```
+
+## runuing
+
 ```bash
 python app.py
 ```
