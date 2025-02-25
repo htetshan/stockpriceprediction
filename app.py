@@ -1,85 +1,90 @@
-import tkinter as tk
-from tkinter import messagebox
+import pandas as pd
 import numpy as np
 import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error, r2_score
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import pandas as pd
 
-# Load the trained model
-try:
-    model = tf.keras.models.load_model("stock_model.h5")
-except Exception as e:
-    messagebox.showerror("Error", f"Failed to load model: {e}")
-    exit()
+# Load the dataset
+df = pd.read_csv("google.csv")
 
-# Load historical data
-try:
-    df = pd.read_csv("google.csv")  # Ensure this file exists
-    df['Date'] = pd.to_datetime(df['Date'])
-    df.set_index('Date', inplace=True)
-except Exception as e:
-    messagebox.showerror("Error", f"Failed to load historical data: {e}")
-    exit()
+df.columns = df.columns.str.strip().str.lower()
+df["date"] = pd.to_datetime(df["date"], errors='coerce')
+df = df.dropna(subset=["date"])
+df = df.sort_values("date")
 
-# Function to predict stock prices
-def predict_prices():
-    try:
-        days = int(entry_days.get())
-        if days <= 0:
-            messagebox.showwarning("Warning", "Please enter a positive number of days.")
-            return
-        
-        # Generate future dates
-        last_date = df.index[-1]
-        future_dates = pd.date_range(start=last_date, periods=days+1, freq='D')[1:]
-        
-        # Generate dummy sequential data for prediction
-        x_future = np.arange(1, days + 1).reshape(-1, 1)  # Reshape to fit model input
-        predictions = model.predict(x_future)
-        
-        # Plot results - Full historical + future data
-        fig, ax = plt.subplots(figsize=(8, 5))
-        ax.plot(df.index, df['Close'], label='Historical Close Price', color='blue')
-        ax.plot(future_dates, predictions, linestyle='-', label='Predicted Close Price', color='red')
-        ax.set_xlabel("Date")
-        ax.set_ylabel("Close Price")
-        ax.set_title("Stock Price Forecast")
-        ax.legend()
-        ax.grid()
-        
-        # Display graph in Tkinter window
-        canvas = FigureCanvasTkAgg(fig, master=window)
-        canvas.draw()
-        canvas.get_tk_widget().pack()
-        
-        # Second graph - Only future predictions with days as x-axis
-        fig2, ax2 = plt.subplots(figsize=(8, 5))
-        ax2.plot(range(1, days + 1), predictions, linestyle='-', marker='o', color='green', label=f'{days}-Day Forecast')
-        ax2.set_xlabel("Days")
-        ax2.set_ylabel("Close Price")
-        ax2.set_title(f"{days}-Day Stock Price Prediction")
-        ax2.legend()
-        ax2.grid()
-        
-        # Display second graph in Tkinter window
-        canvas2 = FigureCanvasTkAgg(fig2, master=window)
-        canvas2.draw()
-        canvas2.get_tk_widget().pack()
-    
-    except ValueError:
-        messagebox.showerror("Error", "Please enter a valid integer for days.")
+# Selecting the 'Close' price as the target column
+scaler = MinMaxScaler(feature_range=(0, 1))
+df["close_scaled"] = scaler.fit_transform(df[["close"]])
 
-# GUI setup
-window = tk.Tk()
-window.title("Stock Price Predictor")
-window.geometry("600x800")
+# Function to create sequences
+def create_sequences(data, time_step=60):
+    X, y = [], []
+    for i in range(len(data) - time_step):
+        X.append(data[i:i+time_step])
+        y.append(data[i+time_step])
+    return np.array(X), np.array(y)
 
-tk.Label(window, text="Please input days:").pack()
-entry_days = tk.Entry(window)
-entry_days.pack()
+# Splitting the data
+df_train = df[(df["date"] >= "2010-01-01") & (df["date"] <= "2020-12-31")]
+df_test = df[(df["date"] >= "2021-01-01") & (df["date"] <= "2021-12-31")]
 
-predict_button = tk.Button(window, text="Predict Close Price", command=predict_prices)
-predict_button.pack()
+data_train = df_train["close_scaled"].values
+data_test = df_test["close_scaled"].values
 
-window.mainloop()
+# Create sequences
+X_train, y_train = create_sequences(data_train)
+X_test, y_test = create_sequences(data_test)
+
+# Reshape input for LSTM
+X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
+X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+
+# Build LSTM model
+model = Sequential([
+    LSTM(50, return_sequences=True, input_shape=(X_train.shape[1], 1)),
+    Dropout(0.2),
+    LSTM(50, return_sequences=False),
+    Dropout(0.2),
+    Dense(25),
+    Dense(1)
+])
+
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+# Train the model
+model.fit(X_train, y_train, epochs=20, batch_size=32, validation_data=(X_test, y_test))
+
+# Make predictions
+y_pred = model.predict(X_test)
+y_pred = scaler.inverse_transform(y_pred.reshape(-1, 1))
+y_test = scaler.inverse_transform(y_test.reshape(-1, 1))
+
+# Save predictions to CSV
+df_test = df_test.iloc[len(df_test) - len(y_test):]
+df_test["actual"] = y_test
+""" [df_test["predicted"]] = y_pred """
+df_test["predicted"] = y_pred.flatten()
+
+df_test.to_csv("testing_predictions_2021.csv", index=False)
+
+# Calculate RMSE, MSE, and R2 Score
+mse = mean_squared_error(y_test, y_pred)
+rmse = np.sqrt(mse)
+r2 = r2_score(y_test, y_pred)
+
+print(f"MSE: {mse}")
+print(f"RMSE: {rmse}")
+print(f"R^2 Score: {r2}")
+
+# Plot results
+plt.figure(figsize=(12, 6))
+plt.plot(df_test["date"], y_test, label="Actual")
+plt.plot(df_test["date"], y_pred, label="Predicted")
+plt.xlabel("Date")
+plt.ylabel("Close Price")
+plt.legend()
+plt.show()
