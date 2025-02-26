@@ -1,168 +1,120 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, scrolledtext
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_squared_error, r2_score
-import matplotlib.pyplot as plt
-import threading
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dropout, Dense, Input
 
-class LSTM_GUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("LSTM Trainer")
-        self.root.geometry("500x450")
+class LSTMModelGUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("LSTM Model Training")
+        self.geometry("800x500")
 
-        self.train_file_path = tk.StringVar()
-        self.test_file_path = tk.StringVar()
-
-        # Training Data Selection
-        tk.Label(root, text="Select Training Dataset:").pack()
-        tk.Entry(root, textvariable=self.train_file_path, width=40).pack()
-        tk.Button(root, text="Browse", command=self.load_train_file).pack()
-        tk.Button(root, text="Load Data", command=self.load_train_data).pack()
-
-        # Testing Data Selection
-        tk.Label(root, text="Select Testing Dataset:").pack()
-        tk.Entry(root, textvariable=self.test_file_path, width=40).pack()
-        tk.Button(root, text="Browse", command=self.load_test_file).pack()
-        tk.Button(root, text="Test Data", command=self.test_model).pack()
-
-        # Train Button
-        self.train_button = tk.Button(root, text="Train Model", command=self.train_model)
-        self.train_button.pack()
-
-        # Metrics Display
-        self.rmse_var = tk.StringVar()
-        self.mse_var = tk.StringVar()
-        self.r2_var = tk.StringVar()
-        
-        tk.Label(root, text="RMSE:").pack()
-        tk.Entry(root, textvariable=self.rmse_var, state='readonly').pack()
-        tk.Label(root, text="MSE:").pack()
-        tk.Entry(root, textvariable=self.mse_var, state='readonly').pack()
-        tk.Label(root, text="R² Score:").pack()
-        tk.Entry(root, textvariable=self.r2_var, state='readonly').pack()
-
-        # Clear Button
-        tk.Button(root, text="Clear", command=self.clear_all).pack()
-
-        self.data = None
+        self.train_data = None
         self.test_data = None
-        self.model = None
-        self.scaler = MinMaxScaler()
+        
+        # Create Buttons
+        self.load_train_button = tk.Button(self, text="Load Training Data", command=self.load_train_data)
+        self.load_train_button.pack(pady=5)
 
-    def load_train_file(self):
-        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
-        self.train_file_path.set(file_path)
-    
-    def load_test_file(self):
-        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
-        self.test_file_path.set(file_path)
-    
+        self.load_test_button = tk.Button(self, text="Load Testing Data", command=self.load_test_data)
+        self.load_test_button.pack(pady=5)
+
+        self.train_button = tk.Button(self, text="Train LSTM Model", command=self.train_model)
+        self.train_button.pack(pady=5)
+
+        self.clear_button = tk.Button(self, text="Clear", command=self.clear_all, bg="red", fg="white")
+        self.clear_button.pack(pady=5)
+
+        # ScrolledText for results
+        self.result_text = scrolledtext.ScrolledText(self, width=70, height=15)
+        self.result_text.pack(pady=10)
+
     def load_train_data(self):
-        if not self.train_file_path.get():
-            messagebox.showerror("Error", "Please select a training dataset")
-            return
-        try:
-            self.data = pd.read_csv(self.train_file_path.get())
+        """ Load Training Data from File """
+        file_path = filedialog.askopenfilename(title="Select Training Data", filetypes=[("CSV Files", "*.csv")])
+        if file_path:
+            self.train_data = pd.read_csv(file_path)
+            self.result_text.insert(tk.END, f"Loaded training data from: {file_path}\n")
 
-            # Check if first column is a date and convert it
-            if isinstance(self.data.iloc[0, 0], str) and "-" in self.data.iloc[0, 0]:
-                self.data.iloc[:, 0] = pd.to_datetime(self.data.iloc[:, 0])
-                self.data.iloc[:, 0] = self.data.iloc[:, 0].map(pd.Timestamp.toordinal)
-            
-            self.data = self.data.astype(float)
-            messagebox.showinfo("Success", "Training data loaded successfully!")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to load training data: {e}")
-    
+    def load_test_data(self):
+        """ Load Testing Data from File """
+        file_path = filedialog.askopenfilename(title="Select Testing Data", filetypes=[("CSV Files", "*.csv")])
+        if file_path:
+            self.test_data = pd.read_csv(file_path)
+            self.result_text.insert(tk.END, f"Loaded testing data from: {file_path}\n")
+
     def train_model(self):
-        if self.data is None:
-            messagebox.showerror("Error", "Load training data first")
+        """ Train the LSTM model """
+        if self.train_data is None or self.test_data is None:
+            self.result_text.insert(tk.END, "Please load both training and testing data before training.\n")
             return
         
-        self.train_button.config(text="Training...", state=tk.DISABLED)
-        threading.Thread(target=self.run_training, daemon=True).start()
-    
-    def run_training(self):
-        try:
-            data = self.data.values.astype(float)
-            data = self.scaler.fit_transform(data)
-            X, y = data[:-1], data[1:, 0]  # Simple LSTM model structure
-            X = X.reshape((X.shape[0], X.shape[1], 1))
-            
-            self.model = Sequential([
-                LSTM(50, activation='relu', return_sequences=True, input_shape=(X.shape[1], 1)),
-                LSTM(50, activation='relu'),  # The last LSTM layer should not return sequences
-                 Dense(1)
-            ])
-            self.model.compile(optimizer='adam', loss='mse')
-            
-            self.model.fit(X, y, epochs=10, batch_size=32, verbose=1)
-            messagebox.showinfo("Success", "Model trained successfully!")
-        except Exception as e:
-            messagebox.showerror("Error", f"Training failed: {e}")
-        finally:
-            self.train_button.config(text="Train Model", state=tk.NORMAL)
-    
-    def test_model(self):
-        if self.model is None:
-            messagebox.showerror("Error", "Train the model first")
-            return
+        # Prepare the training and testing data
+        train_close = self.train_data.iloc[:, 4:5].values
+        test_close = self.test_data.iloc[:, 4:5].values
         
-        if not self.test_file_path.get():
-            messagebox.showerror("Error", "Please select a test dataset")
-            return
-        try:
-            test_data = pd.read_csv(self.test_file_path.get())
-            
-            # Check if first column is a date and convert it
-            if isinstance(test_data.iloc[0, 0], str) and "-" in test_data.iloc[0, 0]:
-                test_data.iloc[:, 0] = pd.to_datetime(test_data.iloc[:, 0])
-                test_data.iloc[:, 0] = test_data.iloc[:, 0].map(pd.Timestamp.toordinal)
-            
-            test_data = test_data.astype(float)
-            test_data = self.scaler.transform(test_data)
-            X_test, y_test = test_data[:-1], test_data[1:, 0]
-            X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
-            
-            y_pred = self.model.predict(X_test)
-            y_pred = self.scaler.inverse_transform(np.concatenate([np.zeros((y_pred.shape[0], X_test.shape[1] - 1)), y_pred], axis=1))[:, -1]
-            y_test = self.scaler.inverse_transform(np.concatenate([np.zeros((y_test.shape[0], X_test.shape[1] - 1)), y_test.reshape(-1, 1)], axis=1))[:, -1]
-            
-            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-            mse = mean_squared_error(y_test, y_pred)
-            r2 = r2_score(y_test, y_pred)
-            
-            self.rmse_var.set(f"{rmse:.4f}")
-            self.mse_var.set(f"{mse:.4f}")
-            self.r2_var.set(f"{r2:.4f}")
-            
-            plt.figure(figsize=(8, 5))
-            plt.plot(y_test, label="Actual")
-            plt.plot(y_pred, label="Predicted")
-            plt.legend()
-            plt.title("Predicted vs Actual Values")
-            plt.show()
-        except Exception as e:
-            messagebox.showerror("Error", f"Testing failed: {e}")
-    
-    def clear_all(self):
-        self.train_file_path.set("")
-        self.test_file_path.set("")
-        self.rmse_var.set("")
-        self.mse_var.set("")
-        self.r2_var.set("")
-        self.data = None
-        self.test_data = None
-        self.model = None
-        messagebox.showinfo("Clear", "All fields and data have been cleared!")
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        data_training_array = scaler.fit_transform(train_close)
+        
+        x_train, y_train = [], []
+        for i in range(100, data_training_array.shape[0]):
+            x_train.append(data_training_array[i-100: i])
+            y_train.append(data_training_array[i, 0])
+        x_train, y_train = np.array(x_train), np.array(y_train)
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = LSTM_GUI(root)
-    root.mainloop()
+        # Build LSTM Model
+        model = Sequential()
+        model.add(Input(shape=(x_train.shape[1], 1)))
+        model.add(LSTM(units=50, activation='relu', return_sequences=True))
+        model.add(Dropout(0.2))
+        model.add(LSTM(units=60, activation='relu', return_sequences=True))
+        model.add(Dropout(0.3))
+        model.add(LSTM(units=80, activation='relu', return_sequences=True))
+        model.add(Dropout(0.4))
+        model.add(LSTM(units=120, activation='relu'))
+        model.add(Dropout(0.5))
+        model.add(Dense(units=1))
+
+        model.compile(optimizer='adam', loss='mean_squared_error', metrics=[tf.keras.metrics.MeanAbsoluteError()])
+        
+        model.fit(x_train, y_train, epochs=100)
+
+        # Prepare the test data
+        past_100_days = pd.DataFrame(train_close[-100:])
+        test_df = pd.DataFrame(test_close)
+        final_df = pd.concat([past_100_days, test_df], ignore_index=True)
+        
+        input_data = scaler.fit_transform(final_df)
+        
+        x_test, y_test = [], []
+        for i in range(100, input_data.shape[0]):
+            x_test.append(input_data[i-100: i])
+            y_test.append(input_data[i, 0])
+        x_test, y_test = np.array(x_test), np.array(y_test)
+
+        # Predict and evaluate the model
+        y_pred = model.predict(x_test)
+        y_pred = scaler.inverse_transform(y_pred.reshape(-1, 1))
+        y_test = scaler.inverse_transform(y_test.reshape(-1, 1))
+
+        mae = mean_absolute_error(y_test, y_pred)
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        r2 = r2_score(y_test, y_pred)
+
+        self.result_text.insert(tk.END, f"Training Complete.\nMAE: {mae}, RMSE: {rmse}, R2 Score: {r2}\n")
+
+    def clear_all(self):
+        """ Clear all fields and reset application """
+        self.train_data = None
+        self.test_data = None
+        self.result_text.delete("1.0", tk.END)
+        self.result_text.insert(tk.END, "All fields cleared.\n")
+
+# Create and run the Tkinter application
+app = LSTMModelGUI()
+app.mainloop()
