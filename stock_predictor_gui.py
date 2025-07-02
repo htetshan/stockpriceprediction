@@ -1,0 +1,475 @@
+import tkinter as tk
+from tkinter import filedialog, scrolledtext, messagebox
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+import tensorflow as tf
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.layers import LSTM, Dropout, Dense, Input
+from tensorflow.keras.callbacks import EarlyStopping
+import pickle
+import os
+import threading
+import time # For simulating dummy data loading/processing time
+
+# Define paths for saving/loading the model and scaler
+MODEL_SAVE_PATH = 'my_lstm_model.keras' # Changed to .keras extension
+SCALER_SAVE_PATH = 'my_scaler.pkl'
+class StockPredictorApp:
+    def __init__(self, master):
+        """
+        Initializes the Tkinter application.
+        Sets up the main window, variables, and calls the widget creation method.
+        """
+        self.master = master
+        master.title("LSTM Stock Price Predictor")
+        master.geometry("800x700") # Initial window size
+        master.resizable(True, True) # Allow resizing
+
+        # --- Variables to store data, model, scaler, results ---
+        self.train_file_path = tk.StringVar(value="")
+        self.test_file_path = tk.StringVar(value="")
+        self.train_df = None
+        self.test_df = None
+        self.model = None
+        self.scaler = None
+        self.history = None # Stores training history for loss plot
+        self.y_test_original = None
+        self.y_pred_original = None
+
+        # --- Hyperparameter Entry Variables ---
+        self.look_back_var = tk.IntVar(value=60)
+        self.epochs_var = tk.IntVar(value=150)
+        self.batch_size_var = tk.IntVar(value=32)
+
+        # --- Create GUI Widgets ---
+        self.create_widgets()
+
+        # --- Initial check for saved model/scaler ---
+        self.check_saved_model_status()
+
+    def create_widgets(self):
+        """
+        Creates and arranges all the GUI elements (buttons, labels, text areas, etc.).
+        """
+        # --- Frame for File Loading ---
+        file_frame = tk.LabelFrame(self.master, text="Data Loading", padx=10, pady=10)
+        file_frame.pack(pady=10, padx=10, fill="x")
+
+        # Train CSV selection
+        tk.Label(file_frame, text="Train CSV:").grid(row=0, column=0, sticky="w", pady=2)
+        tk.Entry(file_frame, textvariable=self.train_file_path, width=60, state='readonly').grid(row=0, column=1, padx=5, pady=2)
+        tk.Button(file_frame, text="Browse", command=self.load_train_csv).grid(row=0, column=2, padx=5, pady=2)
+
+        # Test CSV selection
+        tk.Label(file_frame, text="Test CSV:").grid(row=1, column=0, sticky="w", pady=2)
+        tk.Entry(file_frame, textvariable=self.test_file_path, width=60, state='readonly').grid(row=1, column=1, padx=5, pady=2)
+        tk.Button(file_frame, text="Browse", command=self.load_test_csv).grid(row=1, column=2, padx=5, pady=2)
+
+        # --- Frame for Hyperparameters ---
+        hp_frame = tk.LabelFrame(self.master, text="Hyperparameters", padx=10, pady=10)
+        hp_frame.pack(pady=10, padx=10, fill="x")
+
+        tk.Label(hp_frame, text="Look Back Period:").grid(row=0, column=0, sticky="w", pady=2)
+        tk.Entry(hp_frame, textvariable=self.look_back_var, width=10).grid(row=0, column=1, padx=5, pady=2)
+
+        tk.Label(hp_frame, text="Epochs:").grid(row=1, column=0, sticky="w", pady=2)
+        tk.Entry(hp_frame, textvariable=self.epochs_var, width=10).grid(row=1, column=1, padx=5, pady=2)
+
+        tk.Label(hp_frame, text="Batch Size:").grid(row=2, column=0, sticky="w", pady=2)
+        tk.Entry(hp_frame, textvariable=self.batch_size_var, width=10).grid(row=2, column=1, padx=5, pady=2)
+
+        # --- Frame for Action Buttons ---
+        action_frame = tk.Frame(self.master, padx=10, pady=10)
+        action_frame.pack(pady=10, padx=10, fill="x")
+
+        self.train_button = tk.Button(action_frame, text="🧠 Train & Save Model", command=self.start_training_thread, bg="#4CAF50", fg="white", font=("Arial", 10, "bold"))
+        self.train_button.grid(row=0, column=0, padx=5, pady=5)
+
+        self.predict_button = tk.Button(action_frame, text="🚀 Load & Predict", command=self.load_and_predict, bg="#2196F3", fg="white", font=("Arial", 10, "bold"))
+        self.predict_button.grid(row=0, column=1, padx=5, pady=5)
+
+        self.clear_button = tk.Button(action_frame, text="🧹 Clear Output", command=self.clear_output, bg="#f44336", fg="white", font=("Arial", 10, "bold"))
+        self.clear_button.grid(row=0, column=2, padx=5, pady=5)
+
+        # --- Frame for Output and Plots ---
+        output_frame = tk.LabelFrame(self.master, text="Prediction Results & Plots", padx=10, pady=10)
+        output_frame.pack(pady=10, padx=10, fill="both", expand=True)
+
+        self.output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=70, height=10, state='disabled', font=("Consolas", 10))
+        self.output_text.pack(pady=5, padx=5, fill="both", expand=True)
+
+        plot_button_frame = tk.Frame(output_frame, padx=10, pady=5)
+        plot_button_frame.pack(pady=5)
+
+        self.loss_plot_button = tk.Button(plot_button_frame, text="📈 Show Model Loss", command=self.show_loss_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"))
+        self.loss_plot_button.grid(row=0, column=0, padx=5)
+
+        self.prediction_plot_button = tk.Button(plot_button_frame, text="📈 Show Prediction Plot", command=self.show_prediction_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"))
+        self.prediction_plot_button.grid(row=0, column=1, padx=5)
+
+        # --- Status Bar ---
+        self.status_label = tk.Label(self.master, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W, font=("Arial", 9))
+        self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
+
+    def update_output(self, message):
+        """
+        Inserts a message into the scrolled text output area.
+        Enables the widget, inserts text, then disables it again.
+        """
+        self.output_text.config(state='normal')
+        self.output_text.insert(tk.END, message + "\n")
+        self.output_text.see(tk.END) # Scroll to the end
+        self.output_text.config(state='disabled')
+
+    def update_status(self, message):
+        """
+        Updates the text in the status bar at the bottom of the window.
+        """
+        self.status_label.config(text=message)
+        self.master.update_idletasks() # Force update of GUI
+
+    def load_train_csv(self):
+        """
+        Opens a file dialog for the user to select the training CSV.
+        Loads the CSV into a pandas DataFrame.
+        """
+        file_path = filedialog.askopenfilename(
+            title="Select Training Data CSV",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        if file_path:
+            self.train_file_path.set(file_path)
+            self.update_status(f"Loading training data from: {os.path.basename(file_path)}...")
+            try:
+                self.train_df = pd.read_csv(file_path)
+                self.update_output(f"Loaded training data: {os.path.basename(file_path)}")
+                self.update_status("Training data loaded.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load training CSV: {e}")
+                self.update_status("Failed to load training data.")
+                self.train_df = None
+
+    def load_test_csv(self):
+        """
+        Opens a file dialog for the user to select the testing CSV.
+        Loads the CSV into a pandas DataFrame.
+        """
+        file_path = filedialog.askopenfilename(
+            title="Select Testing Data CSV",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+        )
+        if file_path:
+            self.test_file_path.set(file_path)
+            self.update_status(f"Loading testing data from: {os.path.basename(file_path)}...")
+            try:
+                self.test_df = pd.read_csv(file_path)
+                self.update_output(f"Loaded testing data: {os.path.basename(file_path)}")
+                self.update_status("Testing data loaded.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load testing CSV: {e}")
+                self.update_status("Failed to load testing data.")
+                self.test_df = None
+
+    def start_training_thread(self):
+        """
+        Starts the model training process in a separate thread to prevent the GUI from freezing.
+        Disables buttons during training.
+        """
+        if self.train_df is None:
+            messagebox.showwarning("Missing Data", "Please load the training CSV first.")
+            return
+
+        self.update_status("Training model... (This may take a while)")
+        self.update_output("Starting model training...")
+        self.train_button.config(state=tk.DISABLED)
+        self.predict_button.config(state=tk.DISABLED)
+        self.loss_plot_button.config(state=tk.DISABLED)
+        self.prediction_plot_button.config(state=tk.DISABLED)
+
+        # Create and start a new thread for training
+        training_thread = threading.Thread(target=self._train_model)
+        training_thread.start()
+
+    def _train_model(self):
+        """
+        Contains the core logic for training the LSTM model.
+        This method runs in a separate thread.
+        """
+        try:
+            LOOK_BACK = self.look_back_var.get()
+            EPOCHS = self.epochs_var.get()
+            BATCH_SIZE = self.batch_size_var.get()
+
+            # Use only 'close' price
+            train_close = self.train_df['close'].values.reshape(-1, 1)
+
+            # Scale Data
+            self.scaler = MinMaxScaler(feature_range=(0, 1))
+            data_training_array_scaled = self.scaler.fit_transform(train_close)
+
+            # Prepare Training Data
+            x_train, y_train = [], []
+            for i in range(LOOK_BACK, len(data_training_array_scaled)):
+                x_train.append(data_training_array_scaled[i - LOOK_BACK:i])
+                y_train.append(data_training_array_scaled[i, 0])
+
+            x_train, y_train = np.array(x_train), np.array(y_train)
+
+            # Build Model
+            self.master.after(0, lambda: self.update_output("Building LSTM model..."))
+            self.model = Sequential([
+                Input(shape=(x_train.shape[1], 1)), # Input shape (LOOK_BACK, 1)
+                LSTM(units=100, return_sequences=True),
+                Dropout(0.3),
+                LSTM(units=100, return_sequences=False),
+                Dropout(0.3),
+                Dense(units=1)
+            ])
+
+            self.model.compile(optimizer='adam', loss='mean_squared_error', metrics=[tf.keras.metrics.MeanAbsoluteError()])
+            # self.model.summary() # Can't print summary directly to GUI easily, but good for console debugging
+
+            # Early Stopping
+            early_stop = EarlyStopping(monitor='loss', patience=20, restore_best_weights=True)
+
+            # Train Model
+            self.master.after(0, lambda: self.update_output(f"Training model with {EPOCHS} epochs, {BATCH_SIZE} batch size, {LOOK_BACK} look back..."))
+            self.history = self.model.fit(x_train, y_train,
+                                           epochs=EPOCHS,
+                                           batch_size=BATCH_SIZE,
+                                           callbacks=[early_stop],
+                                           validation_split=0.2,
+                                           verbose=0) # Set verbose to 0 to prevent excessive console output during GUI training
+
+            # Save Model and Scaler
+            self.master.after(0, lambda: self.update_output("Saving model and scaler..."))
+            self.model.save(MODEL_SAVE_PATH)
+            with open(SCALER_SAVE_PATH, 'wb') as f:
+                pickle.dump(self.scaler, f)
+            self.master.after(0, lambda: self.update_output(f"Model saved to '{MODEL_SAVE_PATH}'"))
+            self.master.after(0, lambda: self.update_output(f"Scaler saved to '{SCALER_SAVE_PATH}'"))
+
+            self.master.after(0, lambda: self.update_status("Model training complete and saved."))
+            self.master.after(0, lambda: self.train_button.config(state=tk.NORMAL))
+            self.master.after(0, lambda: self.predict_button.config(state=tk.NORMAL))
+            self.master.after(0, lambda: self.loss_plot_button.config(state=tk.NORMAL))
+            self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.NORMAL))
+
+        except Exception as e:
+            self.master.after(0, lambda: messagebox.showerror("Training Error", f"An error occurred during training: {e}"))
+            self.master.after(0, lambda: self.update_status("Training failed."))
+            self.master.after(0, lambda: self.train_button.config(state=tk.NORMAL))
+            self.master.after(0, lambda: self.predict_button.config(state=tk.NORMAL))
+            self.master.after(0, lambda: self.loss_plot_button.config(state=tk.DISABLED)) # Disable plot buttons if training failed
+            self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.DISABLED))
+
+
+    def load_and_predict(self):
+        """
+        Loads a pre-trained model and scaler (if available), then performs prediction
+        on the test data and displays evaluation metrics.
+        """
+        if self.test_df is None:
+            messagebox.showwarning("Missing Data", "Please load the testing CSV first.")
+            return
+
+        self.update_status("Loading model and making predictions...")
+        self.update_output("Attempting to load saved model and scaler...")
+
+        try:
+            # Load Model
+            self.model = load_model(MODEL_SAVE_PATH)
+            # Load Scaler
+            with open(SCALER_SAVE_PATH, 'rb') as f:
+                self.scaler = pickle.load(f)
+            self.update_output("Model and scaler loaded successfully from local files.")
+
+            LOOK_BACK = self.look_back_var.get()
+
+            # Use only 'close' price
+            train_close = self.train_df['close'].values.reshape(-1, 1) if self.train_df is not None else None
+            test_close = self.test_df['close'].values.reshape(-1, 1)
+
+            if train_close is None:
+                 messagebox.showwarning("Warning", "Training data not loaded. Cannot concatenate for test data preparation. Using dummy training data for test data preparation.")
+                 # Create dummy data for demonstration if files are not found
+                 dates_train = pd.date_range(start='2010-01-01', periods=2500, freq='D')
+                 train_data = np.sin(np.linspace(0, 50, 2500)) * 10 + np.random.rand(2500) * 2 + 100
+                 dummy_train_df = pd.DataFrame({'date': dates_train, 'open': train_data, 'high': train_data+2, 'low': train_data-1, 'close': train_data, 'adj close': train_data, 'volume': np.random.randint(100000, 500000, 2500)})
+                 train_close = dummy_train_df['close'].values.reshape(-1, 1)
+
+            # Concatenate training's last LOOK_BACK days with test data for proper sequence formation
+            past_look_back_days = train_close[-LOOK_BACK:]
+            final_df_combined = np.concatenate((past_look_back_days, test_close), axis=0)
+
+            # Scale the combined data using the *same scaler* fitted on training data
+            input_data_scaled = self.scaler.transform(final_df_combined)
+
+            x_test, y_test = [], []
+            for i in range(LOOK_BACK, len(input_data_scaled)):
+                x_test.append(input_data_scaled[i - LOOK_BACK:i])
+                y_test.append(input_data_scaled[i, 0])
+
+            x_test, y_test = np.array(x_test), np.array(y_test)
+
+            # Predict & Inverse Transform
+            self.update_output("Making predictions on test data...")
+            y_pred_scaled = self.model.predict(x_test)
+
+            # Inverse transform both predictions and actual test values to original scale
+            self.y_test_original = self.scaler.inverse_transform(y_test.reshape(-1, 1))
+            self.y_pred_original = self.scaler.inverse_transform(y_pred_scaled)
+
+            # Evaluate on Original Scale
+            mae_original = mean_absolute_error(self.y_test_original, self.y_pred_original)
+            rmse_original = np.sqrt(mean_squared_error(self.y_test_original, self.y_pred_original))
+            r2_original = r2_score(self.y_test_original, self.y_pred_original)
+
+            # Calculate Mean Absolute Percentage Error (MAPE)
+            def mean_absolute_percentage_error(y_true, y_pred):
+                y_true, y_pred = np.array(y_true), np.array(y_pred)
+                non_zero_true = y_true != 0
+                if not np.any(non_zero_true):
+                    return np.nan
+                return np.mean(np.abs((y_true[non_zero_true] - y_pred[non_zero_true]) / y_true[non_zero_true])) * 100
+
+            mape_original = mean_absolute_percentage_error(self.y_test_original, self.y_pred_original)
+
+            # Display results in the scrolled text box
+            self.update_output("\n--- Evaluation Metrics (Original Scale) ---")
+            self.update_output(f"📊 MAE: {mae_original:.4f}")
+            self.update_output(f"📊 RMSE: {rmse_original:.4f}")
+            self.update_output(f"📊 R² Score: {r2_original:.4f}")
+            self.update_output(f"📊 Mean Absolute Percentage Error (MAPE): {mape_original:.4f}%")
+
+            self.update_status("Prediction complete. Results displayed.")
+            self.loss_plot_button.config(state=tk.NORMAL)
+            self.prediction_plot_button.config(state=tk.NORMAL)
+
+        except FileNotFoundError:
+            messagebox.showerror("Error", "Saved model or scaler not found. Please train the model first.")
+            self.update_status("Prediction failed: Model not found.")
+            self.loss_plot_button.config(state=tk.DISABLED)
+            self.prediction_plot_button.config(state=tk.DISABLED)
+        except Exception as e:
+            messagebox.showerror("Prediction Error", f"An error occurred during prediction: {e}")
+            self.update_status("Prediction failed.")
+            self.loss_plot_button.config(state=tk.DISABLED)
+            self.prediction_plot_button.config(state=tk.DISABLED)
+
+    def show_loss_plot(self):
+        """
+        Displays the model's training loss plot in a new Tkinter window.
+        """
+        if self.history is None:
+            messagebox.showwarning("No Data", "Model has not been trained yet or history is not available.")
+            return
+
+        loss_window = tk.Toplevel(self.master)
+        loss_window.title("Model Loss During Training")
+        loss_window.geometry("800x600")
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(self.history.history['loss'], label='Training Loss')
+        if 'val_loss' in self.history.history:
+            ax.plot(self.history.history['val_loss'], label='Validation Loss')
+        ax.set_title('Model Loss During Training')
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Loss')
+        ax.legend()
+        ax.grid(True)
+        plt.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=loss_window)
+        canvas_widget = canvas.get_tk_widget()
+        canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+        toolbar = NavigationToolbar2Tk(canvas, loss_window)
+        toolbar.update()
+        canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+    def show_prediction_plot(self):
+        """
+        Displays the actual vs. predicted prices plot in a new Tkinter window.
+        """
+        if self.y_test_original is None or self.y_pred_original is None:
+            messagebox.showwarning("No Data", "Predictions have not been made yet.")
+            return
+
+        prediction_window = tk.Toplevel(self.master)
+        prediction_window.title("LSTM Stock Price Prediction (Test Set)")
+        prediction_window.geometry("800x600")
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.plot(self.y_test_original, label="Actual Prices", color='blue', linewidth=2)
+        ax.plot(self.y_pred_original, label="Predicted Prices", color='orange', linestyle='--', linewidth=2)
+        ax.set_title("📉 LSTM Stock Price Prediction (Test Set)")
+        ax.set_xlabel("Time Step (Days in Test Set)")
+        ax.set_ylabel("Stock Close Price")
+        ax.legend()
+        ax.grid(True)
+        plt.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=prediction_window)
+        canvas_widget = canvas.get_tk_widget()
+        canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+        toolbar = NavigationToolbar2Tk(canvas, prediction_window)
+        toolbar.update()
+        canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+    def clear_output(self):
+        """
+        Clears the scrolled text output and resets relevant variables.
+        """
+        self.output_text.config(state='normal')
+        self.output_text.delete(1.0, tk.END)
+        self.output_text.config(state='disabled')
+        self.update_status("Output cleared.")
+        self.y_test_original = None
+        self.y_pred_original = None
+        self.history = None
+        self.model = None
+        self.scaler = None
+        self.check_saved_model_status() # Re-check status of saved model
+
+    def check_saved_model_status(self):
+        """
+        Checks if a saved model and scaler exist and updates the status bar and buttons accordingly.
+        """
+        model_exists = os.path.exists(MODEL_SAVE_PATH) and os.path.isdir(MODEL_SAVE_PATH)
+        scaler_exists = os.path.exists(SCALER_SAVE_PATH)
+
+        if model_exists and scaler_exists:
+            self.update_status("Saved model and scaler found. Ready to load and predict.")
+            self.predict_button.config(state=tk.NORMAL)
+            self.train_button.config(state=tk.NORMAL) # Still allow retraining
+        else:
+            self.update_status("No saved model/scaler found. Please train the model first.")
+            self.predict_button.config(state=tk.DISABLED)
+            self.train_button.config(state=tk.NORMAL) # Always allow training if data is loaded
+
+        self.loss_plot_button.config(state=tk.DISABLED)
+        self.prediction_plot_button.config(state=tk.DISABLED)
+
+
+# Main part of the script
+if __name__ == "__main__":
+    # It's good practice to ensure TensorFlow doesn't hog all GPU memory if available
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            print(e)
+
+    root = tk.Tk()
+    app = StockPredictorApp(root)
+    root.mainloop()
