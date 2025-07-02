@@ -18,6 +18,7 @@ import time # For simulating dummy data loading/processing time
 # Define paths for saving/loading the model and scaler
 MODEL_SAVE_PATH = 'my_lstm_model.keras' # Changed to .keras extension
 SCALER_SAVE_PATH = 'my_scaler.pkl'
+
 class StockPredictorApp:
     def __init__(self, master):
         """
@@ -324,10 +325,15 @@ class StockPredictorApp:
             self.y_test_original = self.scaler.inverse_transform(y_test.reshape(-1, 1))
             self.y_pred_original = self.scaler.inverse_transform(y_pred_scaled)
 
-            # Evaluate on Original Scale
-            mae_original = mean_absolute_error(self.y_test_original, self.y_pred_original)
-            rmse_original = np.sqrt(mean_squared_error(self.y_test_original, self.y_pred_original))
+            # --- Evaluation Metrics ---
+            # Metrics on Original Scale (for R2 and MAPE as they are more interpretable here)
+            # mae_original = mean_absolute_error(self.y_test_original, self.y_pred_original)
+            # rmse_original = np.sqrt(mean_squared_error(self.y_test_original, self.y_pred_original))
             r2_original = r2_score(self.y_test_original, self.y_pred_original)
+
+            # Metrics on Scaled Data (as requested for MAE and RMSE)
+            mae_scaled = mean_absolute_error(y_test, y_pred_scaled)
+            rmse_scaled = np.sqrt(mean_squared_error(y_test, y_pred_scaled))
 
             # Calculate Mean Absolute Percentage Error (MAPE)
             def mean_absolute_percentage_error(y_true, y_pred):
@@ -339,10 +345,9 @@ class StockPredictorApp:
 
             mape_original = mean_absolute_percentage_error(self.y_test_original, self.y_pred_original)
 
-            # Display results in the scrolled text box
-            self.update_output("\n--- Evaluation Metrics (Original Scale) ---")
-            self.update_output(f"📊 MAE: {mae_original:.4f}")
-            self.update_output(f"📊 RMSE: {rmse_original:.4f}")
+            # Display results in the scrolled text box with the requested format
+            self.update_output(f"\n📊 MAE (on scaled data): {mae_scaled:.4f}")
+            self.update_output(f"📊 RMSE (on scaled data): {rmse_scaled:.4f}")
             self.update_output(f"📊 R² Score: {r2_original:.4f}")
             self.update_output(f"📊 Mean Absolute Percentage Error (MAPE): {mape_original:.4f}%")
 
@@ -441,7 +446,7 @@ class StockPredictorApp:
         """
         Checks if a saved model and scaler exist and updates the status bar and buttons accordingly.
         """
-        model_exists = os.path.exists(MODEL_SAVE_PATH) and os.path.isdir(MODEL_SAVE_PATH)
+        model_exists = os.path.exists(MODEL_SAVE_PATH) # For .keras it's a file, not a directory
         scaler_exists = os.path.exists(SCALER_SAVE_PATH)
 
         if model_exists and scaler_exists:
