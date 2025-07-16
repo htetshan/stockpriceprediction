@@ -19,6 +19,11 @@ import time # For simulating dummy data loading/processing time
 MODEL_SAVE_PATH = 'my_lstm_model.keras' # Changed to .keras extension
 SCALER_SAVE_PATH = 'my_scaler.pkl'
 
+# --- Fixed Hyperparameters (No longer user-editable) ---
+FIXED_LOOK_BACK = 60
+FIXED_EPOCHS = 150
+FIXED_BATCH_SIZE = 32
+
 class StockPredictorApp:
     def __init__(self, master):
         """
@@ -26,8 +31,8 @@ class StockPredictorApp:
         Sets up the main window, variables, and calls the widget creation method.
         """
         self.master = master
-        master.title("LSTM Stock Price Predictor")
-        master.geometry("800x700") # Initial window size
+        master.title("Stock Price Prediction System")
+        master.geometry("800x600") # Adjusted initial window size
         master.resizable(True, True) # Allow resizing
 
         # --- Variables to store data, model, scaler, results ---
@@ -40,11 +45,6 @@ class StockPredictorApp:
         self.history = None # Stores training history for loss plot
         self.y_test_original = None
         self.y_pred_original = None
-
-        # --- Hyperparameter Entry Variables ---
-        self.look_back_var = tk.IntVar(value=60)
-        self.epochs_var = tk.IntVar(value=150)
-        self.batch_size_var = tk.IntVar(value=32)
 
         # --- Create GUI Widgets ---
         self.create_widgets()
@@ -69,19 +69,6 @@ class StockPredictorApp:
         tk.Label(file_frame, text="Test CSV:").grid(row=1, column=0, sticky="w", pady=2)
         tk.Entry(file_frame, textvariable=self.test_file_path, width=60, state='readonly').grid(row=1, column=1, padx=5, pady=2)
         tk.Button(file_frame, text="Browse", command=self.load_test_csv).grid(row=1, column=2, padx=5, pady=2)
-
-        # --- Frame for Hyperparameters ---
-        hp_frame = tk.LabelFrame(self.master, text="Hyperparameters", padx=10, pady=10)
-        hp_frame.pack(pady=10, padx=10, fill="x")
-
-        tk.Label(hp_frame, text="Look Back Period:").grid(row=0, column=0, sticky="w", pady=2)
-        tk.Entry(hp_frame, textvariable=self.look_back_var, width=10).grid(row=0, column=1, padx=5, pady=2)
-
-        tk.Label(hp_frame, text="Epochs:").grid(row=1, column=0, sticky="w", pady=2)
-        tk.Entry(hp_frame, textvariable=self.epochs_var, width=10).grid(row=1, column=1, padx=5, pady=2)
-
-        tk.Label(hp_frame, text="Batch Size:").grid(row=2, column=0, sticky="w", pady=2)
-        tk.Entry(hp_frame, textvariable=self.batch_size_var, width=10).grid(row=2, column=1, padx=5, pady=2)
 
         # --- Frame for Action Buttons ---
         action_frame = tk.Frame(self.master, padx=10, pady=10)
@@ -168,7 +155,7 @@ class StockPredictorApp:
             self.update_status(f"Loading testing data from: {os.path.basename(file_path)}...")
             try:
                 self.test_df = pd.read_csv(file_path)
-                self.update_output(f"Loaded testing data: {os.path.basename(file_path)}")
+                self.update_output(f"Loaded testing data {os.path.basename(file_path)} successfully. ")
                 self.update_status("Testing data loaded.")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load testing CSV: {e}")
@@ -201,9 +188,10 @@ class StockPredictorApp:
         This method runs in a separate thread.
         """
         try:
-            LOOK_BACK = self.look_back_var.get()
-            EPOCHS = self.epochs_var.get()
-            BATCH_SIZE = self.batch_size_var.get()
+            # Use fixed hyperparameters
+            LOOK_BACK = FIXED_LOOK_BACK
+            EPOCHS = FIXED_EPOCHS
+            BATCH_SIZE = FIXED_BATCH_SIZE
 
             # Use only 'close' price
             train_close = self.train_df['close'].values.reshape(-1, 1)
@@ -232,13 +220,12 @@ class StockPredictorApp:
             ])
 
             self.model.compile(optimizer='adam', loss='mean_squared_error', metrics=[tf.keras.metrics.MeanAbsoluteError()])
-            # self.model.summary() # Can't print summary directly to GUI easily, but good for console debugging
 
             # Early Stopping
             early_stop = EarlyStopping(monitor='loss', patience=20, restore_best_weights=True)
-
+            #{EPOCHS} epochs, {BATCH_SIZE} batch size, {LOOK_BACK} 
             # Train Model
-            self.master.after(0, lambda: self.update_output(f"Training model with {EPOCHS} epochs, {BATCH_SIZE} batch size, {LOOK_BACK} look back..."))
+            self.master.after(0, lambda: self.update_output(f"Training model ..."))
             self.history = self.model.fit(x_train, y_train,
                                            epochs=EPOCHS,
                                            batch_size=BATCH_SIZE,
@@ -289,7 +276,7 @@ class StockPredictorApp:
                 self.scaler = pickle.load(f)
             self.update_output("Model and scaler loaded successfully from local files.")
 
-            LOOK_BACK = self.look_back_var.get()
+            LOOK_BACK = FIXED_LOOK_BACK # Use fixed look back
 
             # Use only 'close' price
             train_close = self.train_df['close'].values.reshape(-1, 1) if self.train_df is not None else None
@@ -325,15 +312,12 @@ class StockPredictorApp:
             self.y_test_original = self.scaler.inverse_transform(y_test.reshape(-1, 1))
             self.y_pred_original = self.scaler.inverse_transform(y_pred_scaled)
 
-            # --- Evaluation Metrics ---
-            # Metrics on Original Scale (for R2 and MAPE as they are more interpretable here)
-            # mae_original = mean_absolute_error(self.y_test_original, self.y_pred_original)
-            # rmse_original = np.sqrt(mean_squared_error(self.y_test_original, self.y_pred_original))
-            r2_original = r2_score(self.y_test_original, self.y_pred_original)
-
-            # Metrics on Scaled Data (as requested for MAE and RMSE)
+            # Evaluate on Scaled Data (as requested)
             mae_scaled = mean_absolute_error(y_test, y_pred_scaled)
             rmse_scaled = np.sqrt(mean_squared_error(y_test, y_pred_scaled))
+
+            # R2 and MAPE are still calculated on original scale for interpretability
+            r2_original = r2_score(self.y_test_original, self.y_pred_original)
 
             # Calculate Mean Absolute Percentage Error (MAPE)
             def mean_absolute_percentage_error(y_true, y_pred):
@@ -345,8 +329,9 @@ class StockPredictorApp:
 
             mape_original = mean_absolute_percentage_error(self.y_test_original, self.y_pred_original)
 
-            # Display results in the scrolled text box with the requested format
-            self.update_output(f"\n📊 MAE (on scaled data): {mae_scaled:.4f}")
+            # Display results in the scrolled text box
+            self.update_output("\n--- Evaluation Metrics ---")
+            self.update_output(f"📊 MAE (on scaled data): {mae_scaled:.4f}")
             self.update_output(f"📊 RMSE (on scaled data): {rmse_scaled:.4f}")
             self.update_output(f"📊 R² Score: {r2_original:.4f}")
             self.update_output(f"📊 Mean Absolute Percentage Error (MAPE): {mape_original:.4f}%")
@@ -415,6 +400,7 @@ class StockPredictorApp:
         ax.set_title("📉 LSTM Stock Price Prediction (Test Set)")
         ax.set_xlabel("Time Step (Days in Test Set)")
         ax.set_ylabel("Stock Close Price")
+        ax.set_ylabel("Stock Close Price") # Corrected duplicate ylabel
         ax.legend()
         ax.grid(True)
         plt.tight_layout()
@@ -446,7 +432,7 @@ class StockPredictorApp:
         """
         Checks if a saved model and scaler exist and updates the status bar and buttons accordingly.
         """
-        model_exists = os.path.exists(MODEL_SAVE_PATH) # For .keras it's a file, not a directory
+        model_exists = os.path.exists(MODEL_SAVE_PATH) # For .keras, it's a file, not a directory
         scaler_exists = os.path.exists(SCALER_SAVE_PATH)
 
         if model_exists and scaler_exists:
