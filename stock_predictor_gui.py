@@ -243,12 +243,12 @@ class StockPredictorApp:
                                            verbose=0) # Set verbose to 0 to prevent excessive console output during GUI training
 
             # Save Model and Scaler
-            self.master.after(0, lambda: self.update_output("Saving model and scaler..."))
+            #self.master.after(0, lambda: self.update_output("Saving model and scaler..."))
             self.model.save(MODEL_SAVE_PATH)
             with open(SCALER_SAVE_PATH, 'wb') as f:
                 pickle.dump(self.scaler, f)
-            self.master.after(0, lambda: self.update_output(f"Model saved to '{MODEL_SAVE_PATH}'"))
-            self.master.after(0, lambda: self.update_output(f"Scaler saved to '{SCALER_SAVE_PATH}'"))
+            #self.master.after(0, lambda: self.update_output(f"Model saved to '{MODEL_SAVE_PATH}'"))
+            #self.master.after(0, lambda: self.update_output(f"Scaler saved to '{SCALER_SAVE_PATH}'"))
 
             self.master.after(0, lambda: self.update_output("Training model successfully.")) # New success message
             self.master.after(0, lambda: self.update_status("Model training complete and saved."))
@@ -280,7 +280,7 @@ class StockPredictorApp:
             # Load Scaler
             with open(SCALER_SAVE_PATH, 'rb') as f:
                 self.scaler = pickle.load(f)
-            self.update_output("Model and scaler loaded successfully from local files.")
+            #self.update_output("Model and scaler loaded successfully from local files.")
 
             LOOK_BACK = FIXED_LOOK_BACK # Use fixed look back
 
