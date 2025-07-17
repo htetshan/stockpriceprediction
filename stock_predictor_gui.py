@@ -50,11 +50,14 @@ class StockPredictorApp:
         self.create_widgets()
 
         # --- Initial check for saved model/scaler ---
+        # This will now primarily update the status bar and plot button states
         self.check_saved_model_status()
 
     def create_widgets(self):
         """
         Creates and arranges all the GUI elements (buttons, labels, text areas, etc.).
+        The "Train & Save Model" and "Load & Predict" buttons are removed
+        as their actions will be automated.
         """
         # --- Frame for File Loading ---
         file_frame = tk.LabelFrame(self.master, text="Data Loading", padx=10, pady=10)
@@ -70,18 +73,13 @@ class StockPredictorApp:
         tk.Entry(file_frame, textvariable=self.test_file_path, width=60, state='readonly').grid(row=1, column=1, padx=5, pady=2)
         tk.Button(file_frame, text="Browse", command=self.load_test_csv).grid(row=1, column=2, padx=5, pady=2)
 
-        # --- Frame for Action Buttons ---
+        # --- Frame for Action Buttons (only Clear and Plot buttons remain) ---
         action_frame = tk.Frame(self.master, padx=10, pady=10)
         action_frame.pack(pady=10, padx=10, fill="x")
 
-        self.train_button = tk.Button(action_frame, text="🧠 Train & Save Model", command=self.start_training_thread, bg="#4CAF50", fg="white", font=("Arial", 10, "bold"))
-        self.train_button.grid(row=0, column=0, padx=5, pady=5)
-
-        self.predict_button = tk.Button(action_frame, text="🚀 Load & Predict", command=self.load_and_predict, bg="#2196F3", fg="white", font=("Arial", 10, "bold"))
-        self.predict_button.grid(row=0, column=1, padx=5, pady=5)
-
+        # Clear Output button
         self.clear_button = tk.Button(action_frame, text="🧹 Clear Output", command=self.clear_output, bg="#f44336", fg="white", font=("Arial", 10, "bold"))
-        self.clear_button.grid(row=0, column=2, padx=5, pady=5)
+        self.clear_button.grid(row=0, column=0, padx=5, pady=5) # Adjusted column to 0
 
         # --- Frame for Output and Plots ---
         output_frame = tk.LabelFrame(self.master, text="Prediction Results & Plots", padx=10, pady=10)
@@ -93,10 +91,10 @@ class StockPredictorApp:
         plot_button_frame = tk.Frame(output_frame, padx=10, pady=5)
         plot_button_frame.pack(pady=5)
 
-        self.loss_plot_button = tk.Button(plot_button_frame, text="📈 Show Model Loss", command=self.show_loss_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"))
+        self.loss_plot_button = tk.Button(plot_button_frame, text="📈 Show Model Loss", command=self.show_loss_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
         self.loss_plot_button.grid(row=0, column=0, padx=5)
 
-        self.prediction_plot_button = tk.Button(plot_button_frame, text="📈 Show Prediction Plot", command=self.show_prediction_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"))
+        self.prediction_plot_button = tk.Button(plot_button_frame, text="📈 Show Prediction Plot", command=self.show_prediction_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
         self.prediction_plot_button.grid(row=0, column=1, padx=5)
 
         # --- Status Bar ---
@@ -123,7 +121,7 @@ class StockPredictorApp:
     def load_train_csv(self):
         """
         Opens a file dialog for the user to select the training CSV.
-        Loads the CSV into a pandas DataFrame.
+        Loads the CSV into a pandas DataFrame and then automatically starts training.
         """
         file_path = filedialog.askopenfilename(
             title="Select Training Data CSV",
@@ -134,17 +132,24 @@ class StockPredictorApp:
             self.update_status(f"Loading training data from: {os.path.basename(file_path)}...")
             try:
                 self.train_df = pd.read_csv(file_path)
-                self.update_output(f"Loaded training data: {os.path.basename(file_path)}")
-                self.update_status("Training data loaded.")
+                # Clear previous output before showing new message
+                self.output_text.config(state='normal')
+                self.output_text.delete(1.0, tk.END)
+                self.output_text.config(state='disabled')
+                self.update_output(f"Loaded training data {os.path.basename(file_path)} successfully.")
+                self.update_status("Training data loaded. Starting model training...")
+                self.start_training_thread() # Automatically start training
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load training CSV: {e}")
                 self.update_status("Failed to load training data.")
                 self.train_df = None
+                self.loss_plot_button.config(state=tk.DISABLED)
+                self.prediction_plot_button.config(state=tk.DISABLED)
 
     def load_test_csv(self):
         """
         Opens a file dialog for the user to select the testing CSV.
-        Loads the CSV into a pandas DataFrame.
+        Loads the CSV into a pandas DataFrame and then automatically starts prediction.
         """
         file_path = filedialog.askopenfilename(
             title="Select Testing Data CSV",
@@ -155,26 +160,31 @@ class StockPredictorApp:
             self.update_status(f"Loading testing data from: {os.path.basename(file_path)}...")
             try:
                 self.test_df = pd.read_csv(file_path)
-                self.update_output(f"Loaded testing data {os.path.basename(file_path)} successfully. ")
-                self.update_status("Testing data loaded.")
+                # Clear previous output before showing new message
+                self.output_text.config(state='normal')
+                self.output_text.delete(1.0, tk.END)
+                self.output_text.config(state='disabled')
+                self.update_output(f"Loaded testing data {os.path.basename(file_path)} successfully.")
+                self.update_status("Testing data loaded. Starting prediction...")
+                self.load_and_predict() # Automatically start prediction
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load testing CSV: {e}")
                 self.update_status("Failed to load testing data.")
                 self.test_df = None
+                self.loss_plot_button.config(state=tk.DISABLED)
+                self.prediction_plot_button.config(state=tk.DISABLED)
 
     def start_training_thread(self):
         """
         Starts the model training process in a separate thread to prevent the GUI from freezing.
-        Disables buttons during training.
+        Disables plot buttons during training.
         """
         if self.train_df is None:
-            messagebox.showwarning("Missing Data", "Please load the training CSV first.")
+            messagebox.showwarning("Missing Data", "Training data is not loaded. Cannot start training.")
             return
 
         self.update_status("Training model... (This may take a while)")
-        self.update_output("Starting model training...")
-        self.train_button.config(state=tk.DISABLED)
-        self.predict_button.config(state=tk.DISABLED)
+        self.update_output("Training model...") # Initial message for training start
         self.loss_plot_button.config(state=tk.DISABLED)
         self.prediction_plot_button.config(state=tk.DISABLED)
 
@@ -223,9 +233,8 @@ class StockPredictorApp:
 
             # Early Stopping
             early_stop = EarlyStopping(monitor='loss', patience=20, restore_best_weights=True)
-            #{EPOCHS} epochs, {BATCH_SIZE} batch size, {LOOK_BACK} 
+            
             # Train Model
-            self.master.after(0, lambda: self.update_output(f"Training model ..."))
             self.history = self.model.fit(x_train, y_train,
                                            epochs=EPOCHS,
                                            batch_size=BATCH_SIZE,
@@ -241,17 +250,15 @@ class StockPredictorApp:
             self.master.after(0, lambda: self.update_output(f"Model saved to '{MODEL_SAVE_PATH}'"))
             self.master.after(0, lambda: self.update_output(f"Scaler saved to '{SCALER_SAVE_PATH}'"))
 
+            self.master.after(0, lambda: self.update_output("Training model successfully.")) # New success message
             self.master.after(0, lambda: self.update_status("Model training complete and saved."))
-            self.master.after(0, lambda: self.train_button.config(state=tk.NORMAL))
-            self.master.after(0, lambda: self.predict_button.config(state=tk.NORMAL))
             self.master.after(0, lambda: self.loss_plot_button.config(state=tk.NORMAL))
-            self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.NORMAL))
+            # Prediction plot button will be enabled after actual prediction
+            # self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.NORMAL))
 
         except Exception as e:
             self.master.after(0, lambda: messagebox.showerror("Training Error", f"An error occurred during training: {e}"))
             self.master.after(0, lambda: self.update_status("Training failed."))
-            self.master.after(0, lambda: self.train_button.config(state=tk.NORMAL))
-            self.master.after(0, lambda: self.predict_button.config(state=tk.NORMAL))
             self.master.after(0, lambda: self.loss_plot_button.config(state=tk.DISABLED)) # Disable plot buttons if training failed
             self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.DISABLED))
 
@@ -262,11 +269,10 @@ class StockPredictorApp:
         on the test data and displays evaluation metrics.
         """
         if self.test_df is None:
-            messagebox.showwarning("Missing Data", "Please load the testing CSV first.")
+            messagebox.showwarning("Missing Data", "Testing data is not loaded. Cannot predict.")
             return
 
         self.update_status("Loading model and making predictions...")
-        self.update_output("Attempting to load saved model and scaler...")
 
         try:
             # Load Model
@@ -283,12 +289,12 @@ class StockPredictorApp:
             test_close = self.test_df['close'].values.reshape(-1, 1)
 
             if train_close is None:
-                 messagebox.showwarning("Warning", "Training data not loaded. Cannot concatenate for test data preparation. Using dummy training data for test data preparation.")
-                 # Create dummy data for demonstration if files are not found
-                 dates_train = pd.date_range(start='2010-01-01', periods=2500, freq='D')
-                 train_data = np.sin(np.linspace(0, 50, 2500)) * 10 + np.random.rand(2500) * 2 + 100
-                 dummy_train_df = pd.DataFrame({'date': dates_train, 'open': train_data, 'high': train_data+2, 'low': train_data-1, 'close': train_data, 'adj close': train_data, 'volume': np.random.randint(100000, 500000, 2500)})
-                 train_close = dummy_train_df['close'].values.reshape(-1, 1)
+                messagebox.showwarning("Warning", "Training data not loaded. Cannot concatenate for test data preparation. Using dummy training data for test data preparation.")
+                # Create dummy data for demonstration if files are not found
+                dates_train = pd.date_range(start='2010-01-01', periods=2500, freq='D')
+                train_data = np.sin(np.linspace(0, 50, 2500)) * 10 + np.random.rand(2500) * 2 + 100
+                dummy_train_df = pd.DataFrame({'date': dates_train, 'open': train_data, 'high': train_data+2, 'low': train_data-1, 'close': train_data, 'adj close': train_data, 'volume': np.random.randint(100000, 500000, 2500)})
+                train_close = dummy_train_df['close'].values.reshape(-1, 1)
 
             # Concatenate training's last LOOK_BACK days with test data for proper sequence formation
             past_look_back_days = train_close[-LOOK_BACK:]
@@ -341,7 +347,7 @@ class StockPredictorApp:
             self.prediction_plot_button.config(state=tk.NORMAL)
 
         except FileNotFoundError:
-            messagebox.showerror("Error", "Saved model or scaler not found. Please train the model first.")
+            messagebox.showerror("Error", "Saved model or scaler not found. Please train the model first by loading a training CSV.")
             self.update_status("Prediction failed: Model not found.")
             self.loss_plot_button.config(state=tk.DISABLED)
             self.prediction_plot_button.config(state=tk.DISABLED)
@@ -400,7 +406,6 @@ class StockPredictorApp:
         ax.set_title("📉 LSTM Stock Price Prediction (Test Set)")
         ax.set_xlabel("Time Step (Days in Test Set)")
         ax.set_ylabel("Stock Close Price")
-        ax.set_ylabel("Stock Close Price") # Corrected duplicate ylabel
         ax.legend()
         ax.grid(True)
         plt.tight_layout()
@@ -430,20 +435,18 @@ class StockPredictorApp:
 
     def check_saved_model_status(self):
         """
-        Checks if a saved model and scaler exist and updates the status bar and buttons accordingly.
+        Checks if a saved model and scaler exist and updates the status bar and plot buttons accordingly.
         """
-        model_exists = os.path.exists(MODEL_SAVE_PATH) # For .keras, it's a file, not a directory
+        model_exists = os.path.exists(MODEL_SAVE_PATH)
         scaler_exists = os.path.exists(SCALER_SAVE_PATH)
 
         if model_exists and scaler_exists:
-            self.update_status("Saved model and scaler found. Ready to load and predict.")
-            self.predict_button.config(state=tk.NORMAL)
-            self.train_button.config(state=tk.NORMAL) # Still allow retraining
+            self.update_status("Saved model and scaler found. Ready to load data and predict.")
+            # Plot buttons are enabled only after a successful train/predict cycle
         else:
-            self.update_status("No saved model/scaler found. Please train the model first.")
-            self.predict_button.config(state=tk.DISABLED)
-            self.train_button.config(state=tk.NORMAL) # Always allow training if data is loaded
-
+            self.update_status("No saved model/scaler found. Please load training data to begin.")
+        
+        # Always disable plot buttons on initial check or clear, they get enabled after successful operations
         self.loss_plot_button.config(state=tk.DISABLED)
         self.prediction_plot_button.config(state=tk.DISABLED)
 
