@@ -24,6 +24,71 @@ FIXED_LOOK_BACK = 60
 FIXED_EPOCHS = 150
 FIXED_BATCH_SIZE = 32
 
+class WelcomePage(tk.Toplevel):
+    """
+    A simple welcome page that appears before the main application.
+    """
+    def __init__(self, master, on_start_callback):
+        super().__init__(master)
+        self.master = master
+        self.on_start_callback = on_start_callback
+
+        self.title("Welcome to Stock Price Predictor")
+        self.geometry("500x300")
+        self.resizable(False, False)
+        
+        # Center the welcome window
+        self.update_idletasks()
+        x = master.winfo_x() + (master.winfo_width() // 2) - (self.winfo_width() // 2)
+        y = master.winfo_y() + (master.winfo_height() // 2) - (self.winfo_height() // 2)
+        self.geometry(f"+{x}+{y}")
+
+        self.grab_set() # Make this window modal
+        self.transient(master) # Make it appear on top of the master window
+
+        self.create_widgets()
+
+    def create_widgets(self):
+        """Creates the widgets for the welcome page."""
+        welcome_label = tk.Label(self, 
+                                 text="Welcome to the Future of Technology!",
+                                 font=("Arial", 16, "bold"),
+                                 pady=20)
+        welcome_label.pack()
+
+        # Updated info_text to be about "Welcome Technology"
+        info_text = """
+Explore the cutting edge of technological innovation. This system leverages advanced machine learning to provide insights.
+
+Key Technological Aspects:
+- Artificial Intelligence (AI) and Machine Learning (ML) integration.
+- Data processing and visualization capabilities.
+- Robust predictive modeling using neural networks.
+- User-friendly graphical interface for seamless interaction.
+
+Click 'Start Application' to dive into the Stock Price Prediction System, a powerful example of applied technology.
+        """
+        info_label = tk.Label(self, 
+                              text=info_text,
+                              font=("Arial", 10),
+                              justify=tk.LEFT,
+                              wraplength=450)
+        info_label.pack(padx=20, pady=10)
+
+        start_button = tk.Button(self, 
+                                 text="🚀 Start Application", 
+                                 command=self.start_application,
+                                 bg="#4CAF50", fg="white", 
+                                 font=("Arial", 12, "bold"),
+                                 relief=tk.RAISED,
+                                 bd=3)
+        start_button.pack(pady=20)
+
+    def start_application(self):
+        """Destroys the welcome page and calls the callback to start the main app."""
+        self.destroy()
+        self.on_start_callback()
+
 class StockPredictorApp:
     def __init__(self, master):
         """
@@ -140,6 +205,7 @@ class StockPredictorApp:
                 self.update_status("Training data loaded. Starting model training...")
                 self.start_training_thread() # Automatically start training
             except Exception as e:
+                print(f"Error loading training CSV: {e}") # Debugging print
                 messagebox.showerror("Error", f"Failed to load training CSV: {e}")
                 self.update_status("Failed to load training data.")
                 self.train_df = None
@@ -151,6 +217,15 @@ class StockPredictorApp:
         Opens a file dialog for the user to select the testing CSV.
         Loads the CSV into a pandas DataFrame and then automatically starts prediction.
         """
+        # Check if model and scaler exist before proceeding to prediction
+        model_exists = os.path.exists(MODEL_SAVE_PATH)
+        scaler_exists = os.path.exists(SCALER_SAVE_PATH)
+
+        if not (model_exists and scaler_exists):
+            messagebox.showwarning("Model Not Found", "Please train the model first by loading a training CSV before attempting to load test data for prediction.")
+            self.update_status("Prediction aborted: Model not trained.")
+            return
+
         file_path = filedialog.askopenfilename(
             title="Select Testing Data CSV",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
@@ -168,6 +243,7 @@ class StockPredictorApp:
                 self.update_status("Testing data loaded. Starting prediction...")
                 self.load_and_predict() # Automatically start prediction
             except Exception as e:
+                print(f"Error loading testing CSV: {e}") # Debugging print
                 messagebox.showerror("Error", f"Failed to load testing CSV: {e}")
                 self.update_status("Failed to load testing data.")
                 self.test_df = None
@@ -236,19 +312,16 @@ class StockPredictorApp:
             
             # Train Model
             self.history = self.model.fit(x_train, y_train,
-                                           epochs=EPOCHS,
-                                           batch_size=BATCH_SIZE,
-                                           callbacks=[early_stop],
-                                           validation_split=0.2,
-                                           verbose=0) # Set verbose to 0 to prevent excessive console output during GUI training
+                                            epochs=EPOCHS,
+                                            batch_size=BATCH_SIZE,
+                                            callbacks=[early_stop],
+                                            validation_split=0.2,
+                                            verbose=0) # Set verbose to 0 to prevent excessive console output during GUI training
 
             # Save Model and Scaler
-            #self.master.after(0, lambda: self.update_output("Saving model and scaler..."))
             self.model.save(MODEL_SAVE_PATH)
             with open(SCALER_SAVE_PATH, 'wb') as f:
                 pickle.dump(self.scaler, f)
-            #self.master.after(0, lambda: self.update_output(f"Model saved to '{MODEL_SAVE_PATH}'"))
-            #self.master.after(0, lambda: self.update_output(f"Scaler saved to '{SCALER_SAVE_PATH}'"))
 
             self.master.after(0, lambda: self.update_output("Training model successfully.")) # New success message
             self.master.after(0, lambda: self.update_status("Model training complete and saved."))
@@ -257,6 +330,7 @@ class StockPredictorApp:
             # self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.NORMAL))
 
         except Exception as e:
+            print(f"Error during training: {e}") # Debugging print
             self.master.after(0, lambda: messagebox.showerror("Training Error", f"An error occurred during training: {e}"))
             self.master.after(0, lambda: self.update_status("Training failed."))
             self.master.after(0, lambda: self.loss_plot_button.config(state=tk.DISABLED)) # Disable plot buttons if training failed
@@ -297,8 +371,7 @@ class StockPredictorApp:
                 train_close = dummy_train_df['close'].values.reshape(-1, 1)
 
             # Concatenate training's last LOOK_BACK days with test data for proper sequence formation
-            past_look_back_days = train_close[-LOOK_BACK:]
-            final_df_combined = np.concatenate((past_look_back_days, test_close), axis=0)
+            final_df_combined = np.concatenate((train_close[-LOOK_BACK:], test_close), axis=0)
 
             # Scale the combined data using the *same scaler* fitted on training data
             input_data_scaled = self.scaler.transform(final_df_combined)
@@ -347,11 +420,13 @@ class StockPredictorApp:
             self.prediction_plot_button.config(state=tk.NORMAL)
 
         except FileNotFoundError:
+            print(f"Error: Model or scaler files not found. Please train the model first. {MODEL_SAVE_PATH}, {SCALER_SAVE_PATH}") # Debugging print
             messagebox.showerror("Error", "Saved model or scaler not found. Please train the model first by loading a training CSV.")
             self.update_status("Prediction failed: Model not found.")
             self.loss_plot_button.config(state=tk.DISABLED)
             self.prediction_plot_button.config(state=tk.DISABLED)
         except Exception as e:
+            print(f"Error during prediction: {e}") # Debugging print
             messagebox.showerror("Prediction Error", f"An error occurred during prediction: {e}")
             self.update_status("Prediction failed.")
             self.loss_plot_button.config(state=tk.DISABLED)
@@ -465,5 +540,12 @@ if __name__ == "__main__":
             print(e)
 
     root = tk.Tk()
-    app = StockPredictorApp(root)
-    root.mainloop()
+    root.withdraw() # Hide the main window initially
+
+    def start_main_app():
+        root.deiconify() # Show the main window
+        app = StockPredictorApp(root)
+        # root.mainloop() # mainloop is already running due to welcome page
+
+    welcome_page = WelcomePage(root, start_main_app)
+    root.mainloop() # Start the Tkinter event loop
