@@ -300,7 +300,7 @@ class StockPredictorApp:
                                             batch_size=BATCH_SIZE,
                                             callbacks=[early_stop],
                                             validation_split=0.2, # Use 20% of training data for validation
-                                            verbose=0) # Set verbose to 0 to prevent excessive console output during GUI training
+                                            verbose=1) # Set verbose to 0 to prevent excessive console output during GUI training
 
             # Save Model and Scaler after successful training
             self.model.save(MODEL_SAVE_PATH)

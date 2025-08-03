@@ -36,16 +36,18 @@ class WelcomePage(tk.Toplevel):
     def create_widgets(self):
         """Creates the widgets for the simple welcome page."""
         welcome_label = tk.Label(self, 
-                                 text="Welcome!", # Simpler welcome text
-                                 font=("Arial", 36, "bold"), # Much larger font for prominence
+                                 text="Technological University (Meiktila)", # Simpler welcome text
+                                 
+                                 font=("Arial", 24, "bold"), # Much larger font for prominence
                                  fg="#1E88E5", # A pleasant blue color
                                  pady=50) # Increased padding for spacing
         welcome_label.pack()
 
-        info_text = "Click below to start the Stock Price Prediction System." # Simpler info text
+        #info_text = "Department of Information Technology" # Simpler info text
+        info_text = "Stock Price Prediction System" # Simpler info text
         info_label = tk.Label(self, 
                               text=info_text,
-                              font=("Arial", 16), # Larger font
+                              font=("Arial", 20), # Larger font
                               justify=tk.CENTER,
                               wraplength=600, # Adjusted wraplength to fit new window width
                               pady=30) # Increased padding
