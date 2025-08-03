@@ -76,8 +76,6 @@ class StockPredictorApp:
     def create_widgets(self):
         """
         Creates and arranges all the GUI elements (buttons, labels, text areas, etc.).
-        The "Train & Save Model" and "Load & Predict" buttons are removed
-        as their actions will be automated upon file selection.
         """
         # --- Frame for File Loading ---
         # LabelFrame provides a titled border around related widgets.
@@ -95,13 +93,18 @@ class StockPredictorApp:
         tk.Entry(file_frame, textvariable=self.test_file_path, width=60, state='readonly').grid(row=1, column=1, padx=5, pady=2)
         tk.Button(file_frame, text="Browse", command=self.load_test_csv).grid(row=1, column=2, padx=5, pady=2)
 
-        # --- Frame for Action Buttons (only Clear and Plot buttons remain) ---
+        # --- Frame for Action Buttons (Clear and Plot buttons, and new prediction button) ---
         action_frame = tk.Frame(self.master, padx=10, pady=10)
         action_frame.pack(pady=10, padx=10, fill="x")
 
         # Clear Output button
         self.clear_button = tk.Button(action_frame, text="🧹 Clear Output", command=self.clear_output, bg="#f44336", fg="white", font=("Arial", 10, "bold"))
-        self.clear_button.grid(row=0, column=0, padx=5, pady=5) # Adjusted column to 0
+        self.clear_button.grid(row=0, column=0, padx=5, pady=5)
+
+        # New button for 10-day future prediction
+        self.predict_10_days_button = tk.Button(action_frame, text="🔮 Predict Next 10 Days", command=self.start_future_prediction_thread, bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), state=tk.DISABLED)
+        self.predict_10_days_button.grid(row=0, column=1, padx=5, pady=5)
+
 
         # --- Frame for Output and Plots ---
         output_frame = tk.LabelFrame(self.master, text="Prediction Results & Plots", padx=10, pady=10)
@@ -184,6 +187,7 @@ class StockPredictorApp:
                 self.train_df = None # Reset dataframe on error
                 self.loss_plot_button.config(state=tk.DISABLED)
                 self.prediction_plot_button.config(state=tk.DISABLED)
+                self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button on error
 
     def load_test_csv(self):
         """
@@ -216,6 +220,8 @@ class StockPredictorApp:
                 self.update_output(f"Loaded testing data {os.path.basename(file_path)} successfully.")
                 self.update_status("Testing data loaded. Starting prediction...")
                 self.load_and_predict() # Automatically start prediction
+                # Enable the new 10-day prediction button after successful test data load and prediction
+                self.predict_10_days_button.config(state=tk.NORMAL) 
             except Exception as e:
                 print(f"Error loading testing CSV: {e}") # Debugging print
                 messagebox.showerror("Error", f"Failed to load testing CSV: {e}")
@@ -223,6 +229,7 @@ class StockPredictorApp:
                 self.test_df = None # Reset dataframe on error
                 self.loss_plot_button.config(state=tk.DISABLED)
                 self.prediction_plot_button.config(state=tk.DISABLED)
+                self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button on error
 
     def start_training_thread(self):
         """
@@ -238,6 +245,7 @@ class StockPredictorApp:
         # Disable plot buttons immediately when training starts
         self.loss_plot_button.config(state=tk.DISABLED)
         self.prediction_plot_button.config(state=tk.DISABLED)
+        self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button during training
 
         # Create and start a new thread for training
         training_thread = threading.Thread(target=self._train_model)
@@ -277,7 +285,6 @@ class StockPredictorApp:
             x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
             # Build LSTM Model
-            #self.update_output("Building LSTM model...")
             self.model = Sequential([
                 Input(shape=(x_train.shape[1], 1)), # Input shape (LOOK_BACK, 1)
                 LSTM(units=100, return_sequences=True), # First LSTM layer, returns sequences for next LSTM
@@ -310,7 +317,7 @@ class StockPredictorApp:
             self.update_output("Training model successfully.")
             self.update_status("Model training complete and saved.")
             self.loss_plot_button.config(state=tk.NORMAL) # Enable loss plot button after training
-            # Prediction plot button will be enabled after actual prediction
+            # Prediction plot button and 10-day prediction button will be enabled after actual prediction (test CSV load)
             
         except Exception as e:
             print(f"Error during training: {e}") # Debugging print
@@ -320,6 +327,7 @@ class StockPredictorApp:
             # Disable plot buttons if training failed
             self.loss_plot_button.config(state=tk.DISABLED)
             self.prediction_plot_button.config(state=tk.DISABLED)
+            self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button on training failure
 
 
     def load_and_predict(self):
@@ -420,7 +428,6 @@ class StockPredictorApp:
             try:
                 required_columns = ['date', 'close']
                 if all(col in self.test_df.columns for col in required_columns):
-                    # Removed .head() to show all data
                     all_test_data = self.test_df[required_columns]
                     self.update_output(all_test_data.to_string(index=False))
                 else:
@@ -434,6 +441,8 @@ class StockPredictorApp:
             # Enable both plot buttons after successful prediction
             self.loss_plot_button.config(state=tk.NORMAL)
             self.prediction_plot_button.config(state=tk.NORMAL)
+            # The 10-day prediction button is enabled here, after test data is loaded and initial prediction is done.
+            self.predict_10_days_button.config(state=tk.NORMAL) 
 
         except FileNotFoundError:
             print(f"Error: Model or scaler files not found. Please train the model first. {MODEL_SAVE_PATH}, {SCALER_SAVE_PATH}") # Debugging print
@@ -442,6 +451,7 @@ class StockPredictorApp:
             # Disable plot buttons if files are missing
             self.loss_plot_button.config(state=tk.DISABLED)
             self.prediction_plot_button.config(state=tk.DISABLED)
+            self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button on error
         except Exception as e:
             print(f"Error during prediction: {e}") # Debugging print
             self.update_output(f"An error occurred during prediction: {e}") # Display error in output
@@ -450,6 +460,83 @@ class StockPredictorApp:
             # Disable plot buttons if prediction fails
             self.loss_plot_button.config(state=tk.DISABLED)
             self.prediction_plot_button.config(state=tk.DISABLED)
+            self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button on error
+
+    def start_future_prediction_thread(self):
+        """
+        Starts the 10-day future prediction process in a separate thread.
+        Disables the button during prediction.
+        """
+        if self.model is None or self.scaler is None or self.train_df is None or self.test_df is None:
+            messagebox.showwarning("Prerequisites Missing", "Please load both training and testing data first to train/load the model and scaler.")
+            return
+
+        self.update_status("Predicting next 10 days... (This may take a moment)")
+        self.update_output("\n--- Generating Next 10-Day Forecast ---")
+        self.predict_10_days_button.config(state=tk.DISABLED) # Disable button during prediction
+
+        prediction_thread = threading.Thread(target=self._predict_next_10_days)
+        prediction_thread.daemon = True
+        prediction_thread.start()
+
+    def _predict_next_10_days(self):
+        """
+        Performs recursive 10-day future prediction using the trained model.
+        This method runs in a separate thread.
+        """
+        try:
+            LOOK_BACK = FIXED_LOOK_BACK
+            num_prediction_days = 10
+
+            # Combine training and testing data to get the full historical sequence
+            # Ensure 'close' column exists in both dataframes
+            if 'close' not in self.train_df.columns or 'close' not in self.test_df.columns:
+                raise ValueError("Missing 'close' column in either training or testing data.")
+
+            combined_data = np.concatenate((self.train_df['close'].values, self.test_df['close'].values), axis=0).reshape(-1, 1)
+
+            # Get the last LOOK_BACK days from this combined data to start the prediction
+            if len(combined_data) < LOOK_BACK:
+                self.update_output(f"Error: Not enough combined data points ({len(combined_data)}) for LOOK_BACK={LOOK_BACK} to start future prediction.")
+                self.update_status("Future prediction aborted: Insufficient data.")
+                return
+
+            current_sequence = combined_data[-LOOK_BACK:].copy()
+            future_predictions_original = []
+
+            for day in range(num_prediction_days):
+                # 1. Scale the current input sequence
+                scaled_current_sequence = self.scaler.transform(current_sequence)
+
+                # 2. Reshape for model prediction: (1, LOOK_BACK, 1)
+                reshaped_input = np.reshape(scaled_current_sequence, (1, LOOK_BACK, 1))
+
+                # 3. Make prediction for the next day (output will be scaled)
+                next_day_prediction_scaled = self.model.predict(reshaped_input, verbose=0)
+
+                # 4. Inverse transform the prediction back to its original price scale
+                next_day_prediction_original = self.scaler.inverse_transform(next_day_prediction_scaled)
+
+                # Store the original price prediction
+                future_predictions_original.append(next_day_prediction_original[0][0])
+
+                # 5. Update the input sequence for the next prediction (Recursive Step)
+                # Remove the oldest data point from the sequence
+                # Append the newly predicted price (after reshaping it to 2D for concatenation)
+                current_sequence = np.concatenate((current_sequence[1:], next_day_prediction_original.reshape(-1, 1)), axis=0)
+                
+                self.update_output(f"Predicted Day {day + 1}: {next_day_prediction_original[0][0]:.2f}")
+
+            self.update_output("\n--- 10-Day Forecast Complete ---")
+            self.update_status("10-day future prediction complete.")
+
+        except Exception as e:
+            print(f"Error during 10-day future prediction: {e}") # Debugging print
+            self.update_output(f"An error occurred during 10-day future prediction: {e}")
+            messagebox.showerror("Prediction Error", f"An error occurred during 10-day future prediction: {e}")
+            self.update_status("10-day future prediction failed.")
+        finally:
+            self.predict_10_days_button.config(state=tk.NORMAL) # Re-enable button
 
     def show_loss_plot(self):
         """
@@ -537,7 +624,7 @@ class StockPredictorApp:
         self.model = None
         self.scaler = None
         
-        # Re-check status of saved model files (this will disable plot buttons)
+        # Re-check status of saved model files (this will disable plot buttons and new prediction button)
         self.check_saved_model_status() 
 
     def check_saved_model_status(self):
@@ -553,9 +640,11 @@ class StockPredictorApp:
         else:
             self.update_status("No saved model/scaler found. Please load training data to begin.")
         
-        # Always disable plot buttons on initial check or clear, they get enabled after successful operations
+        # Always disable plot buttons and new prediction button on initial check or clear,
+        # they get enabled after successful operations.
         self.loss_plot_button.config(state=tk.DISABLED)
         self.prediction_plot_button.config(state=tk.DISABLED)
+        self.predict_10_days_button.config(state=tk.DISABLED)
 
 # --- Main execution block ---
 if __name__ == "__main__":
