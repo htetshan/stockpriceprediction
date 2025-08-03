@@ -277,7 +277,7 @@ class StockPredictorApp:
             x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
 
             # Build LSTM Model
-            self.update_output("Building LSTM model...")
+            #self.update_output("Building LSTM model...")
             self.model = Sequential([
                 Input(shape=(x_train.shape[1], 1)), # Input shape (LOOK_BACK, 1)
                 LSTM(units=100, return_sequences=True), # First LSTM layer, returns sequences for next LSTM
@@ -393,13 +393,42 @@ class StockPredictorApp:
                 return np.mean(np.abs((y_true[non_zero_true] - y_pred[non_zero_true]) / y_true[non_zero_true])) * 100
 
             mape_original = mean_absolute_percentage_error(self.y_test_original, self.y_pred_original)
+            accuracy_percentage = 100 - mape_original if mape_original is not np.nan else np.nan
 
             # Display results in the scrolled text box
             self.update_output("\n--- Evaluation Metrics ---")
-            self.update_output(f"📊 MAE (on scaled data): {mae_scaled:.4f}")
-            self.update_output(f"📊 RMSE (on scaled data): {rmse_scaled:.4f}")
-            self.update_output(f"📊 R² Score: {r2_original:.4f}")
-            self.update_output(f"📊 Mean Absolute Percentage Error (MAPE): {mape_original:.4f}%")
+            self.update_output(f"📊 MAE    : {mae_scaled:.4f}")
+            self.update_output(f"📊 RMSE   : {rmse_scaled:.4f}")
+            self.update_output(f"📊 R² Score:{r2_original:.4f}")
+            self.update_output(f"🎯 Prediction Accuracy: {accuracy_percentage:.4f}%")
+        
+            # Assess the model's performance based on the accuracy percentage.
+            if accuracy_percentage is not np.nan:
+                if accuracy_percentage >= 95:
+                    prediction_quality = "Excellent! The LSTM model is very accurate."
+                elif accuracy_percentage >= 90:
+                    prediction_quality = "Good. The LSTM model provides reliable predictions."
+                elif accuracy_percentage >= 80:
+                    prediction_quality = "Acceptable. The model's predictions may have some variance."
+                else:
+                    prediction_quality = "Poor. The LSTM model needs more data or parameter tuning."
+                
+                self.update_output(f"✅ Prediction Quality: {prediction_quality}")
+
+            # --- Display the entire testing dataset with robust column check ---
+            self.update_output("\n--- All Testing Data (Date and Close Price) ---")
+            try:
+                required_columns = ['date', 'close']
+                if all(col in self.test_df.columns for col in required_columns):
+                    # Removed .head() to show all data
+                    all_test_data = self.test_df[required_columns]
+                    self.update_output(all_test_data.to_string(index=False))
+                else:
+                    self.update_output("Warning: The 'date' or 'close' column is missing from the testing data file.")
+
+            except Exception as e:
+                self.update_output(f"Could not display all testing data. Error: {e}")
+            # --- End of all testing data display ---
 
             self.update_status("Prediction complete. Results displayed.")
             # Enable both plot buttons after successful prediction

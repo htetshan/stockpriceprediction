@@ -72,7 +72,7 @@ def predict_lstm_model(test_csv_path, model_path="saved_model.h5", scaler_path="
     mae = mean_absolute_error(y_test, y_pred_scaled)
     rmse = np.sqrt(mean_squared_error(y_test, y_pred_scaled))
     r2 = r2_score(y_test_original, y_pred_original)
-    mape = np.mean(np.abs((y_test_original - y_pred_original) / y_test_original)) * 100
+    mape = np.mean(np.abs((y_test_original - y_pred_original) / y_test_original)* 100) 
 
     return {
         "mae_scaled": mae,
