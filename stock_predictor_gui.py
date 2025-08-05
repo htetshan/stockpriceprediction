@@ -410,18 +410,7 @@ class StockPredictorApp:
             self.update_output(f"📊 R² Score:{r2_original:.4f}")
             self.update_output(f"🎯 Prediction Accuracy: {accuracy_percentage:.4f}%")
         
-            # Assess the model's performance based on the accuracy percentage.
-            if accuracy_percentage is not np.nan:
-                if accuracy_percentage >= 95:
-                    prediction_quality = "Excellent! The LSTM model is very accurate."
-                elif accuracy_percentage >= 90:
-                    prediction_quality = "Good. The LSTM model provides reliable predictions."
-                elif accuracy_percentage >= 80:
-                    prediction_quality = "Acceptable. The model's predictions may have some variance."
-                else:
-                    prediction_quality = "Poor. The LSTM model needs more data or parameter tuning."
-                
-                self.update_output(f"✅ Prediction Quality: {prediction_quality}")
+         
 
             # --- Display the entire testing dataset with robust column check ---
             self.update_output("\n--- All Testing Data (Date and Close Price) ---")
