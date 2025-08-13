@@ -33,18 +33,29 @@ class StockPredictorApp:
     and saves the model, performs predictions, and displays evaluation metrics
     and plots.
     """
-    def __init__(self, master):
+    def __init__(self, master, on_back_callback=None): # Added on_back_callback parameter
         """
         Initializes the Tkinter application.
         Sets up the main window, variables, and calls the widget creation method.
 
         Args:
             master (tk.Tk): The root Tkinter window.
+            on_back_callback (callable, optional): A function to call when the "Back"
+                                                   button is pressed, typically to return
+                                                   to a previous screen (e.g., welcome page).
         """
         self.master = master
+        self.on_back_callback = on_back_callback # Store the callback
         master.title("Stock Price Prediction System")
-        master.geometry("800x600") # Adjusted initial window size for better layout
-        master.resizable(True, True) # Allow resizing the window
+        # Set initial geometry to a 3:2 width:height ratio, e.g., 1050x700
+        initial_width = 1050
+        initial_height = 700
+        screen_width = master.winfo_screenwidth()
+        screen_height = master.winfo_screenheight()
+        x = (screen_width // 2) - (initial_width // 2)
+        y = (screen_height // 2) - (initial_height // 2)
+        master.geometry(f"{initial_width}x{initial_height}+{x}+{y}")
+        master.resizable(True, True) # Allow resizing the window and use OS's maximize button
 
         # --- Variables to store data, model, scaler, results ---
         # tk.StringVar to hold file paths, allowing dynamic updates in Entry widgets
@@ -93,43 +104,61 @@ class StockPredictorApp:
         tk.Entry(file_frame, textvariable=self.test_file_path, width=60, state='readonly').grid(row=1, column=1, padx=5, pady=2)
         tk.Button(file_frame, text="Browse", command=self.load_test_csv).grid(row=1, column=2, padx=5, pady=2)
 
-        # --- Frame for Action Buttons (Clear and Plot buttons, and new prediction button) ---
-        action_frame = tk.Frame(self.master, padx=10, pady=10)
-        action_frame.pack(pady=10, padx=10, fill="x")
-
-        # Clear Output button
-        self.clear_button = tk.Button(action_frame, text="🧹 Clear Output", command=self.clear_output, bg="#f44336", fg="white", font=("Arial", 10, "bold"))
-        self.clear_button.grid(row=0, column=0, padx=5, pady=5)
-
-        # New button for 10-day future prediction
-        self.predict_10_days_button = tk.Button(action_frame, text="🔮 Predict Next 10 Days", command=self.start_future_prediction_thread, bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), state=tk.DISABLED)
-        self.predict_10_days_button.grid(row=0, column=1, padx=5, pady=5)
-
-
         # --- Frame for Output and Plots ---
         output_frame = tk.LabelFrame(self.master, text="Prediction Results & Plots", padx=10, pady=10)
         # Pack to fill horizontally and expand vertically
         output_frame.pack(pady=10, padx=10, fill="both", expand=True)
 
+        # --- First Button Control Frame: Predict, Show Model Loss, Show Prediction Plot ---
+        first_button_control_frame = tk.Frame(output_frame, padx=10, pady=5)
+        first_button_control_frame.pack(pady=5) # Pack this frame above the output_text
+
+        # Configure columns to expand equally for buttons in the first frame
+        first_button_control_frame.grid_columnconfigure(0, weight=1)
+        first_button_control_frame.grid_columnconfigure(1, weight=1)
+        first_button_control_frame.grid_columnconfigure(2, weight=1)
+
+        self.predict_10_days_button = tk.Button(first_button_control_frame, text=" Predict Next 10 Days", command=self.start_future_prediction_thread, bg="#FFC107" \
+        "", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
+        self.predict_10_days_button.grid(row=0, column=0, padx=5, pady=5)
+
+        self.loss_plot_button = tk.Button(first_button_control_frame, text="📈 Show Model Loss", command=self.show_loss_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
+        self.loss_plot_button.grid(row=0, column=1, padx=5, pady=5)
+
+        self.prediction_plot_button = tk.Button(first_button_control_frame, text="📈 Show Prediction Plot", command=self.show_prediction_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
+        self.prediction_plot_button.grid(row=0, column=2, padx=5, pady=5)
+
         # ScrolledText widget for displaying messages and evaluation metrics
         self.output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=70, height=10, state='disabled', font=("Consolas", 10))
-        self.output_text.pack(pady=5, padx=5, fill="both", expand=True)
+        self.output_text.pack(pady=5, padx=5, fill="both", expand=True) # This is now between the two button frames
 
-        # Frame to hold plot buttons, centered below the output text
-        plot_button_frame = tk.Frame(output_frame, padx=10, pady=5)
-        plot_button_frame.pack(pady=5)
+        # --- Second Button Control Frame: Previous, Clear Output, Exit ---
+        second_button_control_frame = tk.Frame(output_frame, padx=10, pady=5)
+        second_button_control_frame.pack(pady=5) # Pack this frame below the output_text
 
-        # Buttons to show plots, initially disabled
-        self.loss_plot_button = tk.Button(plot_button_frame, text="📈 Show Model Loss", command=self.show_loss_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
-        self.loss_plot_button.grid(row=0, column=0, padx=5)
+        # Configure columns to expand equally for buttons in the second frame
+        second_button_control_frame.grid_columnconfigure(0, weight=1)
+        second_button_control_frame.grid_columnconfigure(1, weight=1)
+        second_button_control_frame.grid_columnconfigure(2, weight=1)
 
-        self.prediction_plot_button = tk.Button(plot_button_frame, text="📈 Show Prediction Plot", command=self.show_prediction_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
-        self.prediction_plot_button.grid(row=0, column=1, padx=5)
+        self.back_button = tk.Button(second_button_control_frame, text="<<Home", command=self.back_to_welcome, bg="#607D8B", fg="white", font=("Arial", 10, "bold"))
+        self.back_button.grid(row=0, column=0, padx=5, pady=5)
+
+        self.clear_button = tk.Button(second_button_control_frame, text=" Clear Output", command=self.clear_output, bg="#f44336", fg="white", font=("Arial", 10, "bold"))
+        self.clear_button.grid(row=0, column=1, padx=5, pady=5)
+
+        # Corrected spelling from "Exist" to "Exit"
+        self.end_button = tk.Button(second_button_control_frame, text="Exit", command=self.end_application, bg="#E91E63", fg="white", font=("Arial", 10, "bold"))
+        self.end_button.grid(row=0, column=2, padx=5, pady=5)
 
         # --- Status Bar ---
         # Label at the bottom to show application status
         self.status_label = tk.Label(self.master, text="Ready", bd=1, relief=tk.SUNKEN, anchor=tk.W, font=("Arial", 9))
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
+
+    # Removed maximize_window and restore_window methods
+    # These functionalities are typically handled by the operating system's window controls
+    # if master.resizable(True, True) is set.
 
     def update_output(self, message):
         """
@@ -177,7 +206,7 @@ class StockPredictorApp:
                 self.output_text.config(state='normal')
                 self.output_text.delete(1.0, tk.END)
                 self.output_text.config(state='disabled')
-                self.update_output(f"Loaded training data {os.path.basename(file_path)} successfully.")
+                self.update_output(f"Loaded  Dataset For Training: {os.path.basename(file_path)}. Now Training Model...")
                 self.update_status("Training data loaded. Starting model training...")
                 self.start_training_thread() # Automatically start training in a new thread
             except Exception as e:
@@ -217,7 +246,7 @@ class StockPredictorApp:
                 self.output_text.config(state='normal')
                 self.output_text.delete(1.0, tk.END)
                 self.output_text.config(state='disabled')
-                self.update_output(f"Loaded testing data {os.path.basename(file_path)} successfully.")
+                self.update_output(f"Loaded  Dataset For Testing: {os.path.basename(file_path)}.")
                 self.update_status("Testing data loaded. Starting prediction...")
                 self.load_and_predict() # Automatically start prediction
                 # Enable the new 10-day prediction button after successful test data load and prediction
@@ -240,8 +269,8 @@ class StockPredictorApp:
             messagebox.showwarning("Missing Data", "Training data is not loaded. Cannot start training.")
             return
 
-        self.update_status("Training model... (This may take a while)")
-        self.update_output("Training model...") # Initial message for training start
+        self.update_status("Training Model... (This may take a while)")
+        #self.update_output("Training model...") # Initial message for training start
         # Disable plot buttons immediately when training starts
         self.loss_plot_button.config(state=tk.DISABLED)
         self.prediction_plot_button.config(state=tk.DISABLED)
@@ -299,24 +328,23 @@ class StockPredictorApp:
 
             # Early Stopping: Monitor 'loss' and stop if it doesn't improve for 'patience' epochs
             early_stop = EarlyStopping(monitor='loss', patience=20, restore_best_weights=True)
-            
+
             # Train Model
-            self.update_output(f"Starting model training with {EPOCHS} epochs and batch size {BATCH_SIZE}...")
+            #self.update_output(f"Starting model training with {EPOCHS} epochs and batch size {BATCH_SIZE}...")
             self.history = self.model.fit(x_train, y_train,
                                             epochs=EPOCHS,
                                             batch_size=BATCH_SIZE,
                                             callbacks=[early_stop],
                                             validation_split=0.2, # Use 20% of training data for validation
-                                            verbose=1) # Set verbose to 0 to prevent excessive console output during GUI training
-
+                                            verbose=1) # Set verbose to 1 to show training progress in console
             # Save Model and Scaler after successful training
             self.model.save(MODEL_SAVE_PATH)
             with open(SCALER_SAVE_PATH, 'wb') as f:
                 pickle.dump(self.scaler, f)
 
-            self.update_output("Training model successfully.")
+            self.update_output("Training Model Successfully...")
             self.update_status("Model training complete and saved.")
-            self.loss_plot_button.config(state=tk.NORMAL) # Enable loss plot button after training
+            self.master.after(0, lambda: self.loss_plot_button.config(state=tk.NORMAL)) # Enable loss plot button after training
             # Prediction plot button and 10-day prediction button will be enabled after actual prediction (test CSV load)
             
         except Exception as e:
@@ -325,9 +353,9 @@ class StockPredictorApp:
             messagebox.showerror("Training Error", f"An error occurred during training: {e}")
             self.update_status("Training failed.")
             # Disable plot buttons if training failed
-            self.loss_plot_button.config(state=tk.DISABLED)
-            self.prediction_plot_button.config(state=tk.DISABLED)
-            self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button on training failure
+            self.master.after(0, lambda: self.loss_plot_button.config(state=tk.DISABLED))
+            self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.DISABLED))
+            self.master.after(0, lambda: self.predict_10_days_button.config(state=tk.DISABLED))
 
 
     def load_and_predict(self):
@@ -341,7 +369,7 @@ class StockPredictorApp:
             return
 
         self.update_status("Loading model and making predictions...")
-        self.update_output("Loading model and scaler...")
+        #self.update_output("Loading model and scaler...")
 
         try:
             # Load Model
@@ -349,7 +377,7 @@ class StockPredictorApp:
             # Load Scaler
             with open(SCALER_SAVE_PATH, 'rb') as f:
                 self.scaler = pickle.load(f)
-            self.update_output("Model and scaler loaded successfully from local files.")
+            #self.update_output("Model and scaler loaded successfully from local files.")
 
             LOOK_BACK = FIXED_LOOK_BACK # Use fixed look back for prediction
 
@@ -377,7 +405,7 @@ class StockPredictorApp:
             x_test = np.reshape(x_test, (x_test.shape[0], x_test.shape[1], 1))
 
             # Predict & Inverse Transform
-            self.update_output("Making predictions on test data...")
+            #self.update_output("Making predictions on test data...")
             y_pred_scaled = self.model.predict(x_test)
 
             # Inverse transform both predictions and actual test values to original scale
@@ -399,21 +427,20 @@ class StockPredictorApp:
                 if not np.any(non_zero_true):
                     return np.nan # Return NaN if all true values are zero
                 return np.mean(np.abs((y_true[non_zero_true] - y_pred[non_zero_true]) / y_true[non_zero_true])) * 100
+#               return np.mean(np.abs((y_true[non_zero_true] - y_pred[non_zero_true]) / y_true[non_zero_true])) * 100
 
             mape_original = mean_absolute_percentage_error(self.y_test_original, self.y_pred_original)
             accuracy_percentage = 100 - mape_original if mape_original is not np.nan else np.nan
-
+            acuracy_baseOnZero=accuracy_percentage/100
             # Display results in the scrolled text box
-            self.update_output("\n--- Evaluation Metrics ---")
+            self.update_output("\n--- Evaluation Metrics On Testing---")
             self.update_output(f"📊 MAE    : {mae_scaled:.4f}")
             self.update_output(f"📊 RMSE   : {rmse_scaled:.4f}")
             self.update_output(f"📊 R² Score:{r2_original:.4f}")
-            self.update_output(f"🎯 Prediction Accuracy: {accuracy_percentage:.4f}%")
-        
-         
-
+            self.update_output(f"🎯 Prediction Accuracy: {acuracy_baseOnZero:.4f}")
+            
             # --- Display the entire testing dataset with robust column check ---
-            self.update_output("\n--- All Testing Data (Date and Close Price) ---")
+            self.update_output("\n--- Testing Data (date and close Price) ---")
             try:
                 required_columns = ['date', 'close']
                 if all(col in self.test_df.columns for col in required_columns):
@@ -428,28 +455,28 @@ class StockPredictorApp:
 
             self.update_status("Prediction complete. Results displayed.")
             # Enable both plot buttons after successful prediction
-            self.loss_plot_button.config(state=tk.NORMAL)
-            self.prediction_plot_button.config(state=tk.NORMAL)
+            self.master.after(0, lambda: self.loss_plot_button.config(state=tk.NORMAL))
+            self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.NORMAL))
             # The 10-day prediction button is enabled here, after test data is loaded and initial prediction is done.
-            self.predict_10_days_button.config(state=tk.NORMAL) 
+            self.master.after(0, lambda: self.predict_10_days_button.config(state=tk.NORMAL)) 
 
         except FileNotFoundError:
             print(f"Error: Model or scaler files not found. Please train the model first. {MODEL_SAVE_PATH}, {SCALER_SAVE_PATH}") # Debugging print
             messagebox.showerror("Error", "Saved model or scaler not found. Please train the model first by loading a training CSV.")
             self.update_status("Prediction failed: Model not found.")
             # Disable plot buttons if files are missing
-            self.loss_plot_button.config(state=tk.DISABLED)
-            self.prediction_plot_button.config(state=tk.DISABLED)
-            self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button on error
+            self.master.after(0, lambda: self.loss_plot_button.config(state=tk.DISABLED))
+            self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.DISABLED))
+            self.master.after(0, lambda: self.predict_10_days_button.config(state=tk.DISABLED)) # Disable new button on error
         except Exception as e:
             print(f"Error during prediction: {e}") # Debugging print
             self.update_output(f"An error occurred during prediction: {e}") # Display error in output
             messagebox.showerror("Prediction Error", f"An error occurred during prediction: {e}")
             self.update_status("Prediction failed.")
             # Disable plot buttons if prediction fails
-            self.loss_plot_button.config(state=tk.DISABLED)
-            self.prediction_plot_button.config(state=tk.DISABLED)
-            self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button on error
+            self.master.after(0, lambda: self.loss_plot_button.config(state=tk.DISABLED))
+            self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.DISABLED))
+            self.master.after(0, lambda: self.predict_10_days_button.config(state=tk.DISABLED)) # Disable new button on error
 
     def start_future_prediction_thread(self):
         """
@@ -461,7 +488,7 @@ class StockPredictorApp:
             return
 
         self.update_status("Predicting next 10 days... (This may take a moment)")
-        self.update_output("\n--- Generating Next 10-Day Forecast ---")
+        self.update_output("\n--- Predict Next 10-Days ---")
         self.predict_10_days_button.config(state=tk.DISABLED) # Disable button during prediction
 
         prediction_thread = threading.Thread(target=self._predict_next_10_days)
@@ -516,7 +543,7 @@ class StockPredictorApp:
                 
                 self.update_output(f"Predicted Day {day + 1}: {next_day_prediction_original[0][0]:.2f}")
 
-            self.update_output("\n--- 10-Day Forecast Complete ---")
+            #self.update_output("\n--- 10-Day Forecast Complete ---")
             self.update_status("10-day future prediction complete.")
 
         except Exception as e:
@@ -525,7 +552,7 @@ class StockPredictorApp:
             messagebox.showerror("Prediction Error", f"An error occurred during 10-day future prediction: {e}")
             self.update_status("10-day future prediction failed.")
         finally:
-            self.predict_10_days_button.config(state=tk.NORMAL) # Re-enable button
+            self.master.after(0, lambda: self.predict_10_days_button.config(state=tk.NORMAL)) # Re-enable button
 
     def show_loss_plot(self):
         """
@@ -625,7 +652,7 @@ class StockPredictorApp:
         scaler_exists = os.path.exists(SCALER_SAVE_PATH)
 
         if model_exists and scaler_exists:
-            self.update_status("Saved model and scaler found. Ready to load data and predict.")
+            self.update_status("Ready to load data and predict.")
         else:
             self.update_status("No saved model/scaler found. Please load training data to begin.")
         
@@ -635,11 +662,45 @@ class StockPredictorApp:
         self.prediction_plot_button.config(state=tk.DISABLED)
         self.predict_10_days_button.config(state=tk.DISABLED)
 
+    def back_to_welcome(self):
+        """
+        Hides the current StockPredictorApp window and calls the callback
+        to return to the welcome page.
+        """
+        if self.on_back_callback:
+            # First, destroy any open plot windows to prevent them from lingering
+            for widget in self.master.winfo_children():
+                # Check for Toplevel windows by type or title
+                if isinstance(widget, tk.Toplevel) and ("plot" in widget.title().lower() or "prediction" in widget.title().lower() or "loss" in widget.title().lower()):
+                    widget.destroy() # Close plot windows
+            
+            self.master.withdraw() # Hide the main app window
+            self.on_back_callback() # Call the function to show the welcome page
+        else:
+            messagebox.showwarning("Navigation Error", "No callback function provided to go back to the welcome page.")
+        
+    def end_application(self):
+        """
+        Confirms with the user and then terminates the entire Tkinter application.
+        """
+        if messagebox.askyesno("Exit Application", "Are you sure you want to exit the application?"):
+            # Destroy all Toplevel windows first (like plot windows)
+            for widget in self.master.winfo_children():
+                if isinstance(widget, tk.Toplevel):
+                    widget.destroy()
+            self.master.quit() # Quits the mainloop and terminates the application
+
 # --- Main execution block ---
 if __name__ == "__main__":
     # Create the root Tkinter window
     root = tk.Tk()
-    # Instantiate the StockPredictorApp
-    app = StockPredictorApp(root)
+    # For standalone testing, define a dummy callback
+    def dummy_back_callback():
+        print("Dummy back callback: Would normally show welcome page.")
+        # In a real scenario, you might re-create and show the WelcomePage here
+        # For example: WelcomePage(root, start_main_app_callback).deiconify()
+    
+    # Instantiate the StockPredictorApp, passing the dummy callback
+    app = StockPredictorApp(root, on_back_callback=dummy_back_callback)
     # Start the Tkinter event loop
     root.mainloop()
