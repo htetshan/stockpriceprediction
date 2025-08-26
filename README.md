@@ -33,3 +33,5 @@ pip install -r requirements.txt
 ```bash
 python app.py
 ```
+
+testing using gitclone
