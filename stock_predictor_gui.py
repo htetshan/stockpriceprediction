@@ -328,13 +328,13 @@ class StockPredictorApp:
 
             # Early Stopping: Monitor 'loss' and stop if it doesn't improve for 'patience' epochs
             early_stop = EarlyStopping(monitor='loss', patience=20, restore_best_weights=True)
-
+            #early_stop = EarlyStopping(monitor='loss', patience=20, restore_best_weights=False)
             # Train Model
             #self.update_output(f"Starting model training with {EPOCHS} epochs and batch size {BATCH_SIZE}...")
             self.history = self.model.fit(x_train, y_train,
                                             epochs=EPOCHS,
                                             batch_size=BATCH_SIZE,
-                                            callbacks=[early_stop],
+                                            callbacks=[early_stop], #that's auto stop function
                                             validation_split=0.2, # Use 20% of training data for validation
                                             verbose=1) # Set verbose to 1 to show training progress in console
             # Save Model and Scaler after successful training
@@ -415,7 +415,9 @@ class StockPredictorApp:
 
             # Evaluate on Scaled Data (MAE, RMSE) and Original Data (R2, MAPE)
             mae_scaled = mean_absolute_error(y_test, y_pred_scaled)
-            rmse_scaled = np.sqrt(mean_squared_error(y_test, y_pred_scaled))
+
+            mse_scaled = mean_squared_error(y_test, y_pred_scaled)
+            rmse_scaled = np.sqrt(mse_scaled)
 
             r2_original = r2_score(self.y_test_original, self.y_pred_original)
 
@@ -426,18 +428,20 @@ class StockPredictorApp:
                 non_zero_true = y_true != 0
                 if not np.any(non_zero_true):
                     return np.nan # Return NaN if all true values are zero
-                return np.mean(np.abs((y_true[non_zero_true] - y_pred[non_zero_true]) / y_true[non_zero_true])) * 100
+                return np.mean(np.abs((y_true[non_zero_true] - y_pred[non_zero_true]) / y_true[non_zero_true])) 
 #               return np.mean(np.abs((y_true[non_zero_true] - y_pred[non_zero_true]) / y_true[non_zero_true])) * 100
 
             mape_original = mean_absolute_percentage_error(self.y_test_original, self.y_pred_original)
-            accuracy_percentage = 100 - mape_original if mape_original is not np.nan else np.nan
-            acuracy_baseOnZero=accuracy_percentage/100
+            #accuracy_percentage = 100 - mape_original if mape_original is not np.nan else np.nan
+            accuracy_decimal= 1 - mape_original if mape_original is not np.nan else np.nan
+            #acuracy_baseOnZero=accuracy_percentage/100
             # Display results in the scrolled text box
             self.update_output("\n--- Evaluation Metrics On Testing---")
             self.update_output(f"📊 MAE    : {mae_scaled:.4f}")
+            self.update_output(f"📊 MSE    : {mse_scaled:.4f}")
             self.update_output(f"📊 RMSE   : {rmse_scaled:.4f}")
             self.update_output(f"📊 R² Score:{r2_original:.4f}")
-            self.update_output(f"🎯 Prediction Accuracy: {acuracy_baseOnZero:.4f}")
+            #self.update_output(f"🎯 Prediction Accuracy: {accuracy_decimal:.4f}")
             
             # --- Display the entire testing dataset with robust column check ---
             self.update_output("\n--- Testing Data (date and close Price) ---")

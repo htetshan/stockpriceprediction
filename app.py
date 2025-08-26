@@ -18,7 +18,7 @@ class WelcomePage(tk.Toplevel):
         self.master = master
         self.on_start_callback = on_start_callback # Store the callback
         
-        self.title("Welcome To My Project")
+        self.title("Welcome")
         
         # Set initial geometry to a 3:2 width:height ratio, e.g., 1050x700
         initial_width = 1050
@@ -31,7 +31,7 @@ class WelcomePage(tk.Toplevel):
         self.resizable(True, True) # Allow resizing the window and use OS's maximize button
 
         # Set a pure white background color
-        self.background_color = "#ffffff" 
+        self.background_color = "#BCC3A6" 
         self.configure(bg=self.background_color) 
         
         # Create and configure fonts for consistent styling
