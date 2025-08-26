@@ -77,6 +77,14 @@ class StockPredictorApp:
         self.y_test_original = None
         self.y_pred_original = None
 
+        # Store evaluation metrics for plotting
+        self.metrics_data = {
+            "MAE": None,
+            "MSE": None,
+            "RMSE": None,
+            "R2_Score": None
+        }
+
         # --- Create GUI Widgets ---
         self.create_widgets()
 
@@ -113,20 +121,25 @@ class StockPredictorApp:
         first_button_control_frame = tk.Frame(output_frame, padx=10, pady=5)
         first_button_control_frame.pack(pady=5) # Pack this frame above the output_text
 
-        # Configure columns to expand equally for buttons in the first frame
+        # Configure columns to expand equally for buttons in the first frame (now 4 columns)
         first_button_control_frame.grid_columnconfigure(0, weight=1)
         first_button_control_frame.grid_columnconfigure(1, weight=1)
         first_button_control_frame.grid_columnconfigure(2, weight=1)
+        first_button_control_frame.grid_columnconfigure(3, weight=1) # New column for the fourth button
 
         self.predict_10_days_button = tk.Button(first_button_control_frame, text=" Predict Next 10 Days", command=self.start_future_prediction_thread, bg="#FFC107" \
         "", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
         self.predict_10_days_button.grid(row=0, column=0, padx=5, pady=5)
 
+        # NEW BUTTON: Plot Evaluation Metrics
+        self.metrics_plot_button = tk.Button(first_button_control_frame, text=" Show Metrics Plot", command=self.show_evaluation_metrics_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
+        self.metrics_plot_button.grid(row=0, column=1, padx=5, pady=5) # Placed at column 1
+
         self.loss_plot_button = tk.Button(first_button_control_frame, text="📈 Show Model Loss", command=self.show_loss_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
-        self.loss_plot_button.grid(row=0, column=1, padx=5, pady=5)
+        self.loss_plot_button.grid(row=0, column=2, padx=5, pady=5) # Shifted to column 2
 
         self.prediction_plot_button = tk.Button(first_button_control_frame, text="📈 Show Prediction Plot", command=self.show_prediction_plot, bg="#FFC107", fg="black", font=("Arial", 10, "bold"), state=tk.DISABLED)
-        self.prediction_plot_button.grid(row=0, column=2, padx=5, pady=5)
+        self.prediction_plot_button.grid(row=0, column=3, padx=5, pady=5) # Shifted to column 3
 
         # ScrolledText widget for displaying messages and evaluation metrics
         self.output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=70, height=10, state='disabled', font=("Consolas", 10))
@@ -217,6 +230,7 @@ class StockPredictorApp:
                 self.loss_plot_button.config(state=tk.DISABLED)
                 self.prediction_plot_button.config(state=tk.DISABLED)
                 self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button on error
+                self.metrics_plot_button.config(state=tk.DISABLED) # Disable new button on error
 
     def load_test_csv(self):
         """
@@ -259,6 +273,7 @@ class StockPredictorApp:
                 self.loss_plot_button.config(state=tk.DISABLED)
                 self.prediction_plot_button.config(state=tk.DISABLED)
                 self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button on error
+                self.metrics_plot_button.config(state=tk.DISABLED) # Disable new button on error
 
     def start_training_thread(self):
         """
@@ -275,6 +290,7 @@ class StockPredictorApp:
         self.loss_plot_button.config(state=tk.DISABLED)
         self.prediction_plot_button.config(state=tk.DISABLED)
         self.predict_10_days_button.config(state=tk.DISABLED) # Disable new button during training
+        self.metrics_plot_button.config(state=tk.DISABLED) # Disable new button during training
 
         # Create and start a new thread for training
         training_thread = threading.Thread(target=self._train_model)
@@ -356,7 +372,7 @@ class StockPredictorApp:
             self.master.after(0, lambda: self.loss_plot_button.config(state=tk.DISABLED))
             self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.DISABLED))
             self.master.after(0, lambda: self.predict_10_days_button.config(state=tk.DISABLED))
-
+            self.master.after(0, lambda: self.metrics_plot_button.config(state=tk.DISABLED))
 
     def load_and_predict(self):
         """
@@ -413,10 +429,9 @@ class StockPredictorApp:
             self.y_test_original = self.scaler.inverse_transform(y_test.reshape(-1, 1))
             self.y_pred_original = self.scaler.inverse_transform(y_pred_scaled)
 
-            # Evaluate on Scaled Data (MAE, RMSE) and Original Data (R2, MAPE)
+            # Evaluate on Scaled Data (MAE, MSE, RMSE) and Original Data (R2)
             mae_scaled = mean_absolute_error(y_test, y_pred_scaled)
-
-            mse_scaled = mean_squared_error(y_test, y_pred_scaled)
+            mse_scaled = mean_squared_error(y_test, y_pred_scaled) # Added MSE calculation
             rmse_scaled = np.sqrt(mse_scaled)
 
             r2_original = r2_score(self.y_test_original, self.y_pred_original)
@@ -435,10 +450,21 @@ class StockPredictorApp:
             #accuracy_percentage = 100 - mape_original if mape_original is not np.nan else np.nan
             accuracy_decimal= 1 - mape_original if mape_original is not np.nan else np.nan
             #acuracy_baseOnZero=accuracy_percentage/100
+
+            # Store metrics for plotting
+            self.metrics_data["MAE"] = mae_scaled
+            self.metrics_data["MSE"] = mse_scaled
+            self.metrics_data["RMSE"] = rmse_scaled
+            self.metrics_data["R2_Score"] = r2_original
+            # Optional: if you want to plot MAPE/Accuracy, store them too
+            # self.metrics_data["MAPE"] = mape_original 
+            # self.metrics_data["Accuracy"] = accuracy_decimal
+
+
             # Display results in the scrolled text box
             self.update_output("\n--- Evaluation Metrics On Testing---")
             self.update_output(f"📊 MAE    : {mae_scaled:.4f}")
-            self.update_output(f"📊 MSE    : {mse_scaled:.4f}")
+            self.update_output(f"📊 MSE    : {mse_scaled:.4f}") # Display MSE
             self.update_output(f"📊 RMSE   : {rmse_scaled:.4f}")
             self.update_output(f"📊 R² Score:{r2_original:.4f}")
             #self.update_output(f"🎯 Prediction Accuracy: {accuracy_decimal:.4f}")
@@ -463,6 +489,7 @@ class StockPredictorApp:
             self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.NORMAL))
             # The 10-day prediction button is enabled here, after test data is loaded and initial prediction is done.
             self.master.after(0, lambda: self.predict_10_days_button.config(state=tk.NORMAL)) 
+            self.master.after(0, lambda: self.metrics_plot_button.config(state=tk.NORMAL)) # Enable new metrics plot button
 
         except FileNotFoundError:
             print(f"Error: Model or scaler files not found. Please train the model first. {MODEL_SAVE_PATH}, {SCALER_SAVE_PATH}") # Debugging print
@@ -472,6 +499,7 @@ class StockPredictorApp:
             self.master.after(0, lambda: self.loss_plot_button.config(state=tk.DISABLED))
             self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.DISABLED))
             self.master.after(0, lambda: self.predict_10_days_button.config(state=tk.DISABLED)) # Disable new button on error
+            self.master.after(0, lambda: self.metrics_plot_button.config(state=tk.DISABLED)) # Disable new button on error
         except Exception as e:
             print(f"Error during prediction: {e}") # Debugging print
             self.update_output(f"An error occurred during prediction: {e}") # Display error in output
@@ -481,6 +509,7 @@ class StockPredictorApp:
             self.master.after(0, lambda: self.loss_plot_button.config(state=tk.DISABLED))
             self.master.after(0, lambda: self.prediction_plot_button.config(state=tk.DISABLED))
             self.master.after(0, lambda: self.predict_10_days_button.config(state=tk.DISABLED)) # Disable new button on error
+            self.master.after(0, lambda: self.metrics_plot_button.config(state=tk.DISABLED)) # Disable new button on error
 
     def start_future_prediction_thread(self):
         """
@@ -625,6 +654,52 @@ class StockPredictorApp:
         toolbar.update()
         canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
+    def show_evaluation_metrics_plot(self):
+        """
+        Displays a bar chart of the evaluation metrics (MAE, MSE, RMSE, R2 Score)
+        in a new Tkinter window.
+        """
+        # Ensure metrics_data is populated
+        if not all(self.metrics_data.values()):
+            messagebox.showwarning("No Data", "Evaluation metrics have not been calculated yet. Please load test data for prediction.")
+            return
+
+        metrics_window = tk.Toplevel(self.master)
+        metrics_window.title("Evaluation Metrics Overview")
+        metrics_window.geometry("700x500")
+
+        metrics_names = list(self.metrics_data.keys())
+        metrics_values = list(self.metrics_data.values())
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        
+        # Define colors for the bars
+        colors = ['skyblue', 'lightcoral', 'lightgreen', 'gold']
+        
+        bars = ax.bar(metrics_names, metrics_values, color=colors)
+        
+        ax.set_title("📊 Model Evaluation Metrics")
+        ax.set_ylabel("Value")
+        ax.set_ylim(0, max(metrics_values) * 1.2 if metrics_values else 1) # Adjust y-axis limit
+        ax.grid(axis='y', linestyle='--', alpha=0.7)
+
+        # Add value labels on top of the bars
+        for bar in bars:
+            yval = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, yval + (max(metrics_values) * 0.02 if metrics_values else 0.02), 
+                    round(yval, 4), ha='center', va='bottom')
+
+        plt.tight_layout()
+
+        canvas = FigureCanvasTkAgg(fig, master=metrics_window)
+        canvas_widget = canvas.get_tk_widget()
+        canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+        toolbar = NavigationToolbar2Tk(canvas, metrics_window)
+        toolbar.update()
+        canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+
+
     def clear_output(self):
         """
         Clears the scrolled text output and resets relevant variables.
@@ -643,6 +718,14 @@ class StockPredictorApp:
         self.history = None
         self.model = None
         self.scaler = None
+
+        # Reset stored metrics
+        self.metrics_data = {
+            "MAE": None,
+            "MSE": None,
+            "RMSE": None,
+            "R2_Score": None
+        }
         
         # Re-check status of saved model files (this will disable plot buttons and new prediction button)
         self.check_saved_model_status() 
@@ -665,6 +748,7 @@ class StockPredictorApp:
         self.loss_plot_button.config(state=tk.DISABLED)
         self.prediction_plot_button.config(state=tk.DISABLED)
         self.predict_10_days_button.config(state=tk.DISABLED)
+        self.metrics_plot_button.config(state=tk.DISABLED) # Disable new button too
 
     def back_to_welcome(self):
         """
@@ -675,7 +759,7 @@ class StockPredictorApp:
             # First, destroy any open plot windows to prevent them from lingering
             for widget in self.master.winfo_children():
                 # Check for Toplevel windows by type or title
-                if isinstance(widget, tk.Toplevel) and ("plot" in widget.title().lower() or "prediction" in widget.title().lower() or "loss" in widget.title().lower()):
+                if isinstance(widget, tk.Toplevel) and ("plot" in widget.title().lower() or "prediction" in widget.title().lower() or "loss" in widget.title().lower() or "metrics" in widget.title().lower()):
                     widget.destroy() # Close plot windows
             
             self.master.withdraw() # Hide the main app window
@@ -708,3 +792,4 @@ if __name__ == "__main__":
     app = StockPredictorApp(root, on_back_callback=dummy_back_callback)
     # Start the Tkinter event loop
     root.mainloop()
+
