@@ -463,10 +463,10 @@ class StockPredictorApp:
 
             # Display results in the scrolled text box
             self.update_output("\n--- Evaluation Metrics On Testing---")
-            self.update_output(f"📊 MAE    : {mae_scaled:.4f}")
-            self.update_output(f"📊 MSE    : {mse_scaled:.4f}") # Display MSE
-            self.update_output(f"📊 RMSE   : {rmse_scaled:.4f}")
-            self.update_output(f"📊 R² Score:{r2_original:.4f}")
+            self.update_output(f"📊 MAE    : {mae_scaled:.3f}")
+            self.update_output(f"📊 MSE    : {mse_scaled:.3f}") # Display MSE
+            self.update_output(f"📊 RMSE   : {rmse_scaled:.3f}")
+            self.update_output(f"📊 R² Score:{r2_original:.3f}")
             #self.update_output(f"🎯 Prediction Accuracy: {accuracy_decimal:.4f}")
             
             # --- Display the entire testing dataset with robust column check ---
@@ -674,7 +674,7 @@ class StockPredictorApp:
         fig, ax = plt.subplots(figsize=(8, 5))
         
         # Define colors for the bars
-        colors = ['skyblue', 'lightcoral', 'lightgreen', 'gold']
+        colors = ['skyblue', 'lightcoral', 'gold', 'lightgreen']
         
         bars = ax.bar(metrics_names, metrics_values, color=colors)
         
