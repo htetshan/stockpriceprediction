@@ -17,8 +17,8 @@ import time # For simulating dummy data loading/processing time
 
 # Define paths for saving/loading the model and scaler
 # The .keras extension is the recommended format for TensorFlow models
-MODEL_SAVE_PATH = 'my_lstm_model.keras'
-SCALER_SAVE_PATH = 'my_scaler.pkl'
+MODEL_SAVE_PATH = 'lstm.keras'
+SCALER_SAVE_PATH = 'scaler.pkl'
 
 # --- Fixed Hyperparameters (No longer user-editable) ---
 # These values are set to provide a reasonable starting point for the model.
@@ -310,7 +310,7 @@ class StockPredictorApp:
             BATCH_SIZE = FIXED_BATCH_SIZE
 
             # Use only 'close' price for training
-            train_close = self.train_df['close'].values.reshape(-1, 1)
+            train_close = self.train_df['Close'].values.reshape(-1, 1)
 
             # Initialize and fit the MinMaxScaler on the training data
             self.scaler = MinMaxScaler(feature_range=(0, 1))
@@ -351,7 +351,7 @@ class StockPredictorApp:
                                             epochs=EPOCHS,
                                             batch_size=BATCH_SIZE,
                                             callbacks=[early_stop], #that's auto stop function
-                                            validation_split=0.2, # Use 20% of training data for validation
+                                            validation_split=0.01, # Use 20% of training data for validation
                                             verbose=1) # Set verbose to 1 to show training progress in console
             # Save Model and Scaler after successful training
             self.model.save(MODEL_SAVE_PATH)
@@ -400,8 +400,8 @@ class StockPredictorApp:
             # Prepare data for prediction:
             # We need the last LOOK_BACK days from the training data to form the first sequence
             # for the test data prediction.
-            train_close = self.train_df['close'].values.reshape(-1, 1)
-            test_close = self.test_df['close'].values.reshape(-1, 1)
+            train_close = self.train_df['Close'].values.reshape(-1, 1)
+            test_close = self.test_df['Close'].values.reshape(-1, 1)
 
             # Concatenate training's last LOOK_BACK days with test data for proper sequence formation
             # This ensures that the first prediction in the test set uses a full LOOK_BACK history.
@@ -472,7 +472,7 @@ class StockPredictorApp:
             # --- Display the entire testing dataset with robust column check ---
             self.update_output("\n--- Testing Data (date and close Price) ---")
             try:
-                required_columns = ['date', 'close']
+                required_columns = ['Date', 'Close']
                 if all(col in self.test_df.columns for col in required_columns):
                     all_test_data = self.test_df[required_columns]
                     self.update_output(all_test_data.to_string(index=False))
@@ -539,10 +539,10 @@ class StockPredictorApp:
 
             # Combine training and testing data to get the full historical sequence
             # Ensure 'close' column exists in both dataframes
-            if 'close' not in self.train_df.columns or 'close' not in self.test_df.columns:
-                raise ValueError("Missing 'close' column in either training or testing data.")
+            if 'Close' not in self.train_df.columns or 'Close' not in self.test_df.columns:
+                raise ValueError("Missing 'Close' column in either training or testing data.")
 
-            combined_data = np.concatenate((self.train_df['close'].values, self.test_df['close'].values), axis=0).reshape(-1, 1)
+            combined_data = np.concatenate((self.train_df['Close'].values, self.test_df['Close'].values), axis=0).reshape(-1, 1)
 
             # Get the last LOOK_BACK days from this combined data to start the prediction
             if len(combined_data) < LOOK_BACK:
@@ -575,9 +575,10 @@ class StockPredictorApp:
                 current_sequence = np.concatenate((current_sequence[1:], next_day_prediction_original.reshape(-1, 1)), axis=0)
                 
                 self.update_output(f"Predicted Day {day + 1}: {next_day_prediction_original[0][0]:.2f}")
+                #self.update_output(f"{next_day_prediction_original[0][0]:.6f}")
 
             #self.update_output("\n--- 10-Day Forecast Complete ---")
-            self.update_status("10-day future prediction complete.")
+            #self.update_status("10-day future prediction complete.")
 
         except Exception as e:
             print(f"Error during 10-day future prediction: {e}") # Debugging print
@@ -674,11 +675,11 @@ class StockPredictorApp:
         fig, ax = plt.subplots(figsize=(8, 5))
         
         # Define colors for the bars
-        colors = ['skyblue', 'lightcoral', 'gold', 'lightgreen']
+        colors = ['skyblue', 'lightcoral', 'silver','gold']
         
         bars = ax.bar(metrics_names, metrics_values, color=colors)
         
-        ax.set_title("📊 Model Evaluation Metrics")
+        ax.set_title("Model Evaluation Metrics")
         ax.set_ylabel("Value")
         ax.set_ylim(0, max(metrics_values) * 1.2 if metrics_values else 1) # Adjust y-axis limit
         ax.grid(axis='y', linestyle='--', alpha=0.7)
