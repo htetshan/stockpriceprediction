@@ -1,4 +1,5 @@
 import tkinter as tk
+import time
 from tkinter import filedialog, scrolledtext, messagebox
 import pandas as pd
 import numpy as np
@@ -17,14 +18,15 @@ import time # For simulating dummy data loading/processing time
 
 # Define paths for saving/loading the model and scaler
 # The .keras extension is the recommended format for TensorFlow models
-MODEL_SAVE_PATH = 'lstm.keras'
-SCALER_SAVE_PATH = 'scaler.pkl'
+MODEL_SAVE_PATH = 'lstmOne.keras'
+SCALER_SAVE_PATH = 'scalerOne.pkl'
 
 # --- Fixed Hyperparameters (No longer user-editable) ---
 # These values are set to provide a reasonable starting point for the model.
-FIXED_LOOK_BACK = 60 # Number of previous time steps to use as input features to predict the next time step.
-FIXED_EPOCHS = 150   # Number of times the learning algorithm will work through the entire training dataset.
-FIXED_BATCH_SIZE = 32 # Number of samples per gradient update.
+FIXED_LOOK_BACK = 40 # Number of previous time steps to use as input features to predict the next time step.
+FIXED_EPOCHS = 200  # Number of times the learning algorithm will work through the entire training dataset.
+FIXED_BATCH_SIZE = 64 # Number of samples per gradient update.
+FIXED_VALIDATION=0.01 # Percentage of validation from model.fit
 
 class StockPredictorApp:
     """
@@ -142,7 +144,7 @@ class StockPredictorApp:
         self.prediction_plot_button.grid(row=0, column=3, padx=5, pady=5) # Shifted to column 3
 
         # ScrolledText widget for displaying messages and evaluation metrics
-        self.output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=70, height=10, state='disabled', font=("Consolas", 10))
+        self.output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=70, height=10, state='disabled', font=("Consolas", 12))
         self.output_text.pack(pady=5, padx=5, fill="both", expand=True) # This is now between the two button frames
 
         # --- Second Button Control Frame: Previous, Clear Output, Exit ---
@@ -220,6 +222,7 @@ class StockPredictorApp:
                 self.output_text.delete(1.0, tk.END)
                 self.output_text.config(state='disabled')
                 self.update_output(f"Loaded  Dataset For Training: {os.path.basename(file_path)}. Now Training Model...")
+                LOADFILE=file_path
                 self.update_status("Training data loaded. Starting model training...")
                 self.start_training_thread() # Automatically start training in a new thread
             except Exception as e:
@@ -346,13 +349,22 @@ class StockPredictorApp:
             early_stop = EarlyStopping(monitor='loss', patience=20, restore_best_weights=True)
             #early_stop = EarlyStopping(monitor='loss', patience=20, restore_best_weights=False)
             # Train Model
+                    # --- Time tracking starts here ---
+            print("\n--- Training started... ---")
+            start_time = time.time()
+            start_datetime = time.ctime(start_time)
+            print(f"Start Time: {start_datetime}")
             #self.update_output(f"Starting model training with {EPOCHS} epochs and batch size {BATCH_SIZE}...")
             self.history = self.model.fit(x_train, y_train,
                                             epochs=EPOCHS,
                                             batch_size=BATCH_SIZE,
                                             callbacks=[early_stop], #that's auto stop function
-                                            validation_split=0.01, # Use 20% of training data for validation
+                                            validation_split=FIXED_VALIDATION, # Use 20% of training data for validation
                                             verbose=1) # Set verbose to 1 to show training progress in console
+            # --- Time tracking ends here ---
+            end_time = time.time()
+            end_datetime = time.ctime(end_time)
+            duration = end_time - start_time
             # Save Model and Scaler after successful training
             self.model.save(MODEL_SAVE_PATH)
             with open(SCALER_SAVE_PATH, 'wb') as f:
@@ -362,7 +374,12 @@ class StockPredictorApp:
             self.update_status("Model training complete and saved.")
             self.master.after(0, lambda: self.loss_plot_button.config(state=tk.NORMAL)) # Enable loss plot button after training
             # Prediction plot button and 10-day prediction button will be enabled after actual prediction (test CSV load)
-            
+            # Print the results to the terminal
+            print("\n--- Training Time Results ---")
+            print(f"End Time: {end_datetime}")
+            #print(f"Total Training Duration: {duration:.2f} seconds")
+            print(f"Total Training Duration: {duration:.2f}s,{FIXED_VALIDATION}")
+            print("------------------------\n")
         except Exception as e:
             print(f"Error during training: {e}") # Debugging print
             self.update_output(f"An error occurred during training: {e}") # Display error in output
