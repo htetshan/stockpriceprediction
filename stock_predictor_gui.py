@@ -18,14 +18,14 @@ import time # For simulating dummy data loading/processing time
 
 # Define paths for saving/loading the model and scaler
 # The .keras extension is the recommended format for TensorFlow models
-MODEL_SAVE_PATH = 'lstmOne.keras'
-SCALER_SAVE_PATH = 'scalerOne.pkl'
+MODEL_SAVE_PATH = 'lstmTwo.keras'
+SCALER_SAVE_PATH = 'scalerTwo.pkl'
 
 # --- Fixed Hyperparameters (No longer user-editable) ---
 # These values are set to provide a reasonable starting point for the model.
-FIXED_LOOK_BACK = 40 # Number of previous time steps to use as input features to predict the next time step.
-FIXED_EPOCHS = 200  # Number of times the learning algorithm will work through the entire training dataset.
-FIXED_BATCH_SIZE = 64 # Number of samples per gradient update.
+FIXED_LOOK_BACK = 50# Number of previous time steps to use as input features to predict the next time step.
+FIXED_EPOCHS = 150 # Number of times the learning algorithm will work through the entire training dataset.
+FIXED_BATCH_SIZE = 32 # Number of samples per gradient update.
 FIXED_VALIDATION=0.01 # Percentage of validation from model.fit
 
 class StockPredictorApp:
@@ -50,7 +50,7 @@ class StockPredictorApp:
         self.on_back_callback = on_back_callback # Store the callback
         master.title("Stock Price Prediction System")
         # Set initial geometry to a 3:2 width:height ratio, e.g., 1050x700
-        initial_width = 1050
+        initial_width = 900
         initial_height = 700
         screen_width = master.winfo_screenwidth()
         screen_height = master.winfo_screenheight()
@@ -78,6 +78,9 @@ class StockPredictorApp:
         # Stores original (unscaled) test actual and predicted values for plotting and evaluation
         self.y_test_original = None
         self.y_pred_original = None
+        
+        # Stores the name of the test file for dynamic plot titles
+        self.test_filename_for_plot = "Test Set" # Default value
 
         # Store evaluation metrics for plotting
         self.metrics_data = {
@@ -103,16 +106,20 @@ class StockPredictorApp:
         file_frame = tk.LabelFrame(self.master, text="Data Loading", padx=10, pady=10)
         file_frame.pack(pady=10, padx=10, fill="x") # Pack to fill horizontally
 
+        # --- Inner frame to hold and center the widgets ---
+        inner_file_frame = tk.Frame(file_frame)
+        inner_file_frame.pack() # Default pack behavior centers the frame
+
         # Train CSV selection row
-        tk.Label(file_frame, text="Train CSV:").grid(row=0, column=0, sticky="w", pady=2)
+        tk.Label(inner_file_frame, text="Train CSV:").grid(row=0, column=0, sticky="w", pady=2)
         # Entry widget to display selected file path (readonly as user selects via browse button)
-        tk.Entry(file_frame, textvariable=self.train_file_path, width=60, state='readonly').grid(row=0, column=1, padx=5, pady=2)
-        tk.Button(file_frame, text="Browse", command=self.load_train_csv).grid(row=0, column=2, padx=5, pady=2)
+        tk.Entry(inner_file_frame, textvariable=self.train_file_path, width=60, state='readonly').grid(row=0, column=1, padx=5, pady=2)
+        tk.Button(inner_file_frame, text="Browse", command=self.load_train_csv).grid(row=0, column=2, padx=5, pady=2)
 
         # Test CSV selection row
-        tk.Label(file_frame, text="Test CSV:").grid(row=1, column=0, sticky="w", pady=2)
-        tk.Entry(file_frame, textvariable=self.test_file_path, width=60, state='readonly').grid(row=1, column=1, padx=5, pady=2)
-        tk.Button(file_frame, text="Browse", command=self.load_test_csv).grid(row=1, column=2, padx=5, pady=2)
+        tk.Label(inner_file_frame, text="Test CSV:").grid(row=1, column=0, sticky="w", pady=2)
+        tk.Entry(inner_file_frame, textvariable=self.test_file_path, width=60, state='readonly').grid(row=1, column=1, padx=5, pady=2)
+        tk.Button(inner_file_frame, text="Browse", command=self.load_test_csv).grid(row=1, column=2, padx=5, pady=2)
 
         # --- Frame for Output and Plots ---
         output_frame = tk.LabelFrame(self.master, text="Prediction Results & Plots", padx=10, pady=10)
@@ -144,8 +151,8 @@ class StockPredictorApp:
         self.prediction_plot_button.grid(row=0, column=3, padx=5, pady=5) # Shifted to column 3
 
         # ScrolledText widget for displaying messages and evaluation metrics
-        self.output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=70, height=10, state='disabled', font=("Consolas", 12))
-        self.output_text.pack(pady=5, padx=5, fill="both", expand=True) # This is now between the two button frames
+        self.output_text = scrolledtext.ScrolledText(output_frame, wrap=tk.WORD, width=70, height=20, state='disabled', font=("Consolas", 12))
+        self.output_text.pack(pady=9, padx=8,fill="y") # This is now between the two button frames
 
         # --- Second Button Control Frame: Previous, Clear Output, Exit ---
         second_button_control_frame = tk.Frame(output_frame, padx=10, pady=5)
@@ -221,7 +228,7 @@ class StockPredictorApp:
                 self.output_text.config(state='normal')
                 self.output_text.delete(1.0, tk.END)
                 self.output_text.config(state='disabled')
-                self.update_output(f"Loaded  Dataset For Training: {os.path.basename(file_path)}. Now Training Model...")
+                self.update_output(f"Loaded  Dataset For Training: {os.path.basename(file_path)}.\nNow Training Model...")
                 LOADFILE=file_path
                 self.update_status("Training data loaded. Starting model training...")
                 self.start_training_thread() # Automatically start training in a new thread
@@ -256,6 +263,9 @@ class StockPredictorApp:
         )
         if file_path:
             self.test_file_path.set(file_path)
+            # --- CHANGE: Store the test filename for the plot title ---
+            self.test_filename_for_plot = os.path.splitext(os.path.basename(file_path))[0]
+            
             self.update_status(f"Loading testing data from: {os.path.basename(file_path)}...")
             try:
                 self.test_df = pd.read_csv(file_path)
@@ -487,7 +497,7 @@ class StockPredictorApp:
             #self.update_output(f"🎯 Prediction Accuracy: {accuracy_decimal:.4f}")
             
             # --- Display the entire testing dataset with robust column check ---
-            self.update_output("\n--- Testing Data (date and close Price) ---")
+            self.update_output("\n--- Testing Data (Date and Close Price) ---")
             try:
                 required_columns = ['Date', 'Close']
                 if all(col in self.test_df.columns for col in required_columns):
@@ -538,7 +548,10 @@ class StockPredictorApp:
             return
 
         self.update_status("Predicting next 10 days... (This may take a moment)")
-        self.update_output("\n--- Predict Next 10-Days ---")
+        
+        self.update_output(f"\n---  Prediction of the Next 10 Days After {self.test_filename_for_plot}---")
+
+        #self.update_output("\n--- Predict Next 10-Days ---")
         self.predict_10_days_button.config(state=tk.DISABLED) # Disable button during prediction
 
         prediction_thread = threading.Thread(target=self._predict_next_10_days)
@@ -648,14 +661,16 @@ class StockPredictorApp:
             return
 
         prediction_window = tk.Toplevel(self.master) # Create a new top-level window
-        prediction_window.title("LSTM Stock Price Prediction (Test Set)")
+        # --- CHANGE: Use the dynamic filename in the window title ---
+        prediction_window.title(f"Prediction for {self.test_filename_for_plot}")
         prediction_window.geometry("800x600")
 
         # Create a Matplotlib figure and axes for the prediction plot
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.plot(self.y_test_original, label="Actual Prices", color='blue', linewidth=2)
         ax.plot(self.y_pred_original, label="Predicted Prices", color='orange', linestyle='--', linewidth=2)
-        ax.set_title("📉 LSTM Stock Price Prediction (Test Set)")
+        # --- CHANGE: Use the dynamic filename in the plot title ---
+        ax.set_title(f"LSTM Stock Price Prediction ({self.test_filename_for_plot})")
         ax.set_xlabel("Time Step (Days in Test Set)")
         ax.set_ylabel("Stock Close Price")
         ax.legend()

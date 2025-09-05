@@ -21,7 +21,7 @@ class WelcomePage(tk.Toplevel):
         self.title("Welcome")
         
         # Set initial geometry to a 3:2 width:height ratio, e.g., 1050x700
-        initial_width = 1050
+        initial_width = 850
         initial_height = 700
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
@@ -36,9 +36,9 @@ class WelcomePage(tk.Toplevel):
         
         # Create and configure fonts for consistent styling
         # Reduced font sizes slightly to help with text fitting on screen
-        self.title_font = font.Font(family="Times New Roman", size=20,) # Reduced from 30
-        self.subtitle_font = font.Font(family="Times New Roman", size=20,) # Reduced from 18
-        self.main_text_font = font.Font(family="Times New Roman", size=24, weight="bold")
+        self.title_font = font.Font(family="Times New Roman", size=16,) # Reduced from 30
+        self.subtitle_font = font.Font(family="Times New Roman", size=16,) # Reduced from 18
+        self.main_text_font = font.Font(family="Times New Roman", size=20, weight="bold")
         self.mid_text_font = font.Font(family="Times New Roman", size=18)
         self.footer_label_font = font.Font(family="Times New Roman", size=14)
         
@@ -70,7 +70,7 @@ class WelcomePage(tk.Toplevel):
         try:
             logo_left_path = "assets/logo_left.png"  
             logo_left_img = Image.open(logo_left_path)
-            logo_left_img = logo_left_img.resize((150, 150), Image.Resampling.LANCZOS)
+            logo_left_img = logo_left_img.resize((130, 130), Image.Resampling.LANCZOS)
             self.logo_left_tk = ImageTk.PhotoImage(logo_left_img)
             
             logo_left_label = tk.Label(top_frame, image=self.logo_left_tk, bg=self.background_color)
@@ -96,7 +96,7 @@ class WelcomePage(tk.Toplevel):
         try:
             logo_right_path = "assets/logo_right.png"  
             logo_right_img = Image.open(logo_right_path)
-            logo_right_img = logo_right_img.resize((150, 150), Image.Resampling.LANCZOS)
+            logo_right_img = logo_right_img.resize((130, 130), Image.Resampling.LANCZOS)
             self.logo_right_tk = ImageTk.PhotoImage(logo_right_img)
             
             logo_right_label = tk.Label(top_frame, image=self.logo_right_tk, bg=self.background_color)
@@ -107,7 +107,7 @@ class WelcomePage(tk.Toplevel):
 
         # --- Middle Section ---
         middle_frame = tk.Frame(self, bg=self.background_color) 
-        middle_frame.pack(fill="x", pady=50)
+        middle_frame.pack(fill="x", pady=60)
 
         project_title_label = tk.Label(middle_frame, 
                                       text="Stock Price Prediction Using Long Short-Term Memory(LSTM)",
