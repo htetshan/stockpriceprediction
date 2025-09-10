@@ -1,4 +1,4 @@
-## make this step
+## make this steps
 
 first -> git clone [repo]
 
