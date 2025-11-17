@@ -74,7 +74,9 @@ class WelcomePage(tk.Toplevel):
 
         middle_frame = tk.Frame(self, bg=self.background_color) 
         middle_frame.pack(fill="x", pady=60)
-        tk.Label(middle_frame, text="Love You Fighting(◡‿◡)", font=self.main_text_font, justify="center", bg=self.background_color).pack(pady=20)
+        tk.Label(middle_frame, text="Stock Price Prediction Using Long Short-Term Memory", font=self.main_text_font, justify="center", bg=self.background_color).pack(pady=20)
+        
+        tk.Frame(self, bg=self.background_color).pack(fill="both", expand=True)
 
         bottom_frame = tk.Frame(self, bg=self.background_color, pady=40) 
         bottom_frame.pack(fill="x")
