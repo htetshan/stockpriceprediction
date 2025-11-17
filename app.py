@@ -31,11 +31,11 @@ class WelcomePage(tk.Toplevel):
         self.background_color = "#BCC3A6" 
         self.configure(bg=self.background_color) 
         
-        self.title_font = font.Font(family="Times New Roman", size=16)
-        self.subtitle_font = font.Font(family="Times New Roman", size=16)
-        self.main_text_font = font.Font(family="Times New Roman", size=20, weight="bold")
+        self.title_font = font.Font(family="Times New Roman", size=24)
+        self.subtitle_font = font.Font(family="Times New Roman", size=24)
+        self.main_text_font = font.Font(family="Times New Roman", size=30, weight="bold")
         self.mid_text_font = font.Font(family="Times New Roman", size=18)
-        self.footer_label_font = font.Font(family="Times New Roman", size=14)
+        self.footer_label_font = font.Font(family="Times New Roman", size=18)
         
         self.create_widgets()
 
@@ -74,7 +74,7 @@ class WelcomePage(tk.Toplevel):
 
         middle_frame = tk.Frame(self, bg=self.background_color) 
         middle_frame.pack(fill="x", pady=60)
-        tk.Label(middle_frame, text="Stock Price Prediction Using Long Short-Term Memory(LSTM)", font=self.main_text_font, justify="center", bg=self.background_color).pack(pady=20)
+        tk.Label(middle_frame, text="Stock Price Prediction Using Long Short-Term Memory", font=self.main_text_font, justify="center", bg=self.background_color).pack(pady=20)
         
         tk.Frame(self, bg=self.background_color).pack(fill="both", expand=True)
 
